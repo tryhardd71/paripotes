@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Imposteur Mots</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="bg-glow"></div>
+    <div class="page-wrap">
+      <section id="video-panel" class="video-panel hidden">
+        <div class="video-panel-header">
+          <h2>Vocal & Caméra</h2>
+          <span id="video-status" class="video-status"></span>
+        </div>
+        <div id="video-grid" class="video-grid"></div>
+        <div id="video-controls" class="video-controls"></div>
+      </section>
+      <main id="app"></main>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
