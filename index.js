@@ -41,6 +41,14 @@ app.get('/api/auth/check', (req, res) => {
   });
 });
 
+function isEmailConfigured() {
+  return !!(
+    process.env.BREVO_API_KEY ||
+    process.env.RESEND_API_KEY ||
+    (process.env.SMTP_USER && process.env.SMTP_PASS)
+  );
+}
+
 app.post('/api/auth/send-code', async (req, res) => {
   const { email, reset } = req.body;
   if (!email?.includes('@')) return res.status(400).json({ error: 'Email invalide' });
@@ -48,6 +56,12 @@ app.post('/api/auth/send-code', async (req, res) => {
   const user = getUserByEmail(email);
   if (user?.password_hash && !reset) {
     return res.status(400).json({ error: 'Ce compte existe déjà. Connecte-toi avec ton mot de passe.' });
+  }
+
+  if (!isEmailConfigured()) {
+    return res.status(503).json({
+      error: 'Envoi email non configuré sur le serveur. Contacte l\'admin ou réessaie plus tard.',
+    });
   }
 
   const code = generateCode();
@@ -357,7 +371,7 @@ app.get('/api/status', (_req, res) => {
     odds: oddsCount,
     bookmakers,
     oddsApiConfigured: !!process.env.ODDS_API_KEY,
-    emailAuto: true,
+    emailConfigured: isEmailConfigured(),
   });
 });
 

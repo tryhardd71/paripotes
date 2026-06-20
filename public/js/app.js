@@ -2,6 +2,46 @@ const API = '';
 let token = localStorage.getItem('pp_token');
 let user = null;
 let leagues = [];
+
+async function fetchWithTimeout(url, opts, ms = 45000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.detail || 'Erreur serveur');
+    return data;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error('Le serveur met du temps à démarrer (plan gratuit). Réessaie dans 30 secondes.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function saveSession(data) {
+  token = data.token;
+  user = data.user;
+  localStorage.setItem('pp_token', token);
+  if (data.rememberMe !== false) {
+    localStorage.setItem('pp_remember', '1');
+    localStorage.setItem('pp_email', user.email);
+  } else {
+    localStorage.removeItem('pp_remember');
+  }
+}
+
+function clearSession() {
+  token = null;
+  user = null;
+  localStorage.removeItem('pp_token');
+}
+
+window.saveSession = saveSession;
+window.clearSession = clearSession;
+window.fetchWithTimeout = fetchWithTimeout;
 let activeLeague = null;
 let matches = [];
 let matchFilter = 'upcoming';
@@ -24,6 +64,7 @@ function toast(msg) {
   el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
+window.toast = toast;
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -50,15 +91,17 @@ function showMain() {
   });
 }
 
+window.showMain = showMain;
+
 (async () => {
+  fetch('/api/status').catch(() => {});
   if (token) {
     try {
       const data = await api('/api/me');
       user = data.user;
       showMain();
     } catch {
-      localStorage.removeItem('pp_token');
-      token = null;
+      clearSession();
     }
   }
 })();

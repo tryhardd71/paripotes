@@ -16,32 +16,10 @@ function hideAuthError() {
   document.getElementById('auth-error').classList.add('hidden');
 }
 
-async function fetchWithTimeout(url, opts, ms = 25000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const res = await fetch(url, { ...opts, signal: ctrl.signal });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || data.detail || 'Erreur serveur');
-    return data;
-  } catch (e) {
-    if (e.name === 'AbortError') throw new Error('Délai dépassé — le serveur met du temps à démarrer, réessaie.');
-    throw e;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-function saveSession(data) {
-  token = data.token;
-  user = data.user;
-  localStorage.setItem('pp_token', token);
-  if (data.rememberMe !== false) {
-    localStorage.setItem('pp_remember', '1');
-    localStorage.setItem('pp_email', user.email);
-  } else {
-    localStorage.removeItem('pp_remember');
-  }
+function goToLogin(email, message) {
+  document.getElementById('show-login').click();
+  if (email) document.getElementById('login-email').value = email;
+  if (message) showAuthError(message);
 }
 
 document.getElementById('show-login').onclick = () => {
@@ -69,13 +47,13 @@ document.getElementById('login-btn').onclick = async () => {
   btn.disabled = true;
   btn.textContent = 'Connexion...';
   try {
-    const data = await fetchWithTimeout('/api/auth/login', {
+    const data = await window.fetchWithTimeout('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, rememberMe }),
     });
-    saveSession(data);
-    showMain();
+    window.saveSession(data);
+    window.showMain();
   } catch (e) {
     showAuthError(e.message);
   } finally {
@@ -90,17 +68,22 @@ document.getElementById('send-code-btn').onclick = async () => {
   const btn = document.getElementById('send-code-btn');
   btn.disabled = true;
   btn.textContent = 'Envoi en cours...';
+  hideAuthError();
   try {
-    await fetchWithTimeout('/api/auth/send-code', {
+    const check = await window.fetchWithTimeout(`/api/auth/check?email=${encodeURIComponent(email)}`);
+    if (check.exists && check.hasPassword) {
+      goToLogin(email, 'Compte déjà créé — connecte-toi avec ton mot de passe (pas besoin de code).');
+      return;
+    }
+    await window.fetchWithTimeout('/api/auth/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
     document.getElementById('email-display').textContent = email;
     showAuthPanel('panel-register-code');
-    hideAuthError();
     document.getElementById('code-input').focus();
-    toast('Code envoyé ! Vérifie ta boîte mail.');
+    window.toast('Code envoyé ! Vérifie ta boîte mail.');
   } catch (e) {
     showAuthError(e.message);
   } finally {
@@ -117,16 +100,22 @@ document.getElementById('register-btn').onclick = async () => {
   const rememberMe = document.getElementById('remember-me-register').checked;
   if (!code || !password) return showAuthError('Code et mot de passe requis');
   if (password.length < 6) return showAuthError('Mot de passe : 6 caractères minimum');
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true;
+  btn.textContent = 'Création...';
   try {
-    const data = await fetchWithTimeout('/api/auth/register', {
+    const data = await window.fetchWithTimeout('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, code, username, password, rememberMe }),
     });
-    saveSession(data);
-    showMain();
+    window.saveSession(data);
+    window.showMain();
   } catch (e) {
     showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer mon compte';
   }
 };
 
@@ -152,19 +141,21 @@ document.getElementById('forgot-send-btn').onclick = async () => {
   if (!email) return showAuthError('Entre ton email');
   const btn = document.getElementById('forgot-send-btn');
   btn.disabled = true;
+  btn.textContent = 'Envoi...';
   try {
-    await fetchWithTimeout('/api/auth/send-code', {
+    await window.fetchWithTimeout('/api/auth/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, reset: true }),
     });
     document.getElementById('forgot-reset-fields').classList.remove('hidden');
     hideAuthError();
-    toast('Code envoyé !');
+    window.toast('Code envoyé !');
   } catch (e) {
     showAuthError(e.message);
   } finally {
     btn.disabled = false;
+    btn.textContent = 'Envoyer le code';
   }
 };
 
@@ -174,14 +165,14 @@ document.getElementById('forgot-reset-btn').onclick = async () => {
   const password = document.getElementById('forgot-password').value;
   if (!code || !password) return showAuthError('Code et nouveau mot de passe requis');
   try {
-    const data = await fetchWithTimeout('/api/auth/register', {
+    const data = await window.fetchWithTimeout('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, code, password, rememberMe: true }),
     });
-    saveSession(data);
-    showMain();
-    toast('Mot de passe mis à jour !');
+    window.saveSession(data);
+    window.showMain();
+    window.toast('Mot de passe mis à jour !');
   } catch (e) {
     showAuthError(e.message);
   }
@@ -189,15 +180,12 @@ document.getElementById('forgot-reset-btn').onclick = async () => {
 
 document.getElementById('logout-btn').onclick = async () => {
   try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
-  token = null;
-  user = null;
-  localStorage.removeItem('pp_token');
+  window.clearSession();
   authScreen.classList.remove('hidden');
   mainScreen.classList.add('hidden');
   document.getElementById('show-login').click();
 };
 
-// Pré-remplir email sauvegardé
 if (localStorage.getItem('pp_email') && localStorage.getItem('pp_remember')) {
   document.getElementById('login-email').value = localStorage.getItem('pp_email');
   document.getElementById('remember-me').checked = true;
