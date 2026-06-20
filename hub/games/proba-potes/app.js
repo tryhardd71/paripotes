@@ -65,7 +65,8 @@ function connectSocket() {
     showAuthError('Impossible de charger le forum. Rafraîchis la page (Ctrl+F5).');
     return;
   }
-  socket = io(API || undefined, { auth: { token } });
+  const socketUrl = window.HUB_CONFIG?.probaSocketApi || API || undefined;
+  socket = io(socketUrl, { auth: { token } });
 
   socket.on('connect_error', () => {
     token = null;

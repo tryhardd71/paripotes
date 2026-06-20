@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,7 @@ const PROBA_API = process.env.PROBA_URL || 'https://proba-potes.onrender.com';
 const PUBLIC_PARIPOTES = '/paripotes';
 const PUBLIC_IMPOSTEUR = '/imposteur';
 const PUBLIC_PROBA = '/proba';
+const PUBLIC_PROBA_API = '/proba-api';
 
 const app = express();
 
@@ -23,13 +25,23 @@ app.get('/config.js', (_, res) => {
     `window.HUB_CONFIG = ${JSON.stringify({
       paripotesUrl: PUBLIC_PARIPOTES,
       imposteurUrl: PUBLIC_IMPOSTEUR,
+      probaUrl: PUBLIC_PROBA,
       paripotesApi: PARIPOTES_API,
       imposteurApi: IMPOSTEUR_API,
-      probaUrl: PUBLIC_PROBA,
-      probaApi: PROBA_API,
+      probaApi: PUBLIC_PROBA_API,
+      probaSocketApi: PROBA_API,
     })};`
   );
 });
+
+app.use(
+  PUBLIC_PROBA_API,
+  createProxyMiddleware({
+    target: PROBA_API,
+    changeOrigin: true,
+    pathRewrite: (p) => p.replace(PUBLIC_PROBA_API, '') || '/',
+  })
+);
 
 app.use(PUBLIC_IMPOSTEUR, express.static(path.join(__dirname, 'games/imposteur')));
 app.use(PUBLIC_PARIPOTES, express.static(path.join(__dirname, 'games/paripotes')));
@@ -45,5 +57,5 @@ app.listen(PORT, () => {
   console.log(`Hub → http://localhost:${PORT}`);
   console.log(`  PariPotes  → ${PUBLIC_PARIPOTES} (API: ${PARIPOTES_API})`);
   console.log(`  Imposteur  → ${PUBLIC_IMPOSTEUR} (API: ${IMPOSTEUR_API})`);
-  console.log(`  Proba      → ${PUBLIC_PROBA} (API: ${PROBA_API})`);
+  console.log(`  Proba      → ${PUBLIC_PROBA} (API: ${PUBLIC_PROBA_API} → ${PROBA_API})`);
 });
