@@ -15,7 +15,7 @@
     <header class="hero">
       <span class="badge">Bienvenue</span>
       <h1>Les Potes</h1>
-      <p>Deux jeux entre amis — choisis où tu veux aller.</p>
+      <p>Trois jeux entre amis — tout depuis la même adresse.</p>
     </header>
 
     <nav class="cards" aria-label="Choisir un jeu">
@@ -32,19 +32,28 @@
         <p class="card-desc">Trouve l'imposteur — mots secrets, tours de parole et vote final entre potes.</p>
         <span class="card-cta">Jouer à l'imposteur <span aria-hidden="true">→</span></span>
       </a>
+
+      <a id="link-proba" class="card card--proba" href="#">
+        <span class="card-icon" aria-hidden="true">🎲</span>
+        <h2>Proba Potes</h2>
+        <p class="card-desc">Forum de probas — dépose un pari, un pote accepte, jouez vos nombres en secret.</p>
+        <span class="card-cta">Aller au forum <span aria-hidden="true">→</span></span>
+      </a>
     </nav>
 
-    <p class="footer">Les deux jeux sont accessibles depuis cette même adresse.</p>
+    <p class="footer">Les trois jeux sont accessibles depuis cette même adresse.</p>
   </div>
 
   <script>
     const cfg = window.HUB_CONFIG || {
       paripotesUrl: '/paripotes',
       imposteurUrl: '/imposteur',
+      probaUrl: '/proba',
     };
 
     document.getElementById('link-paripotes').href = cfg.paripotesUrl;
     document.getElementById('link-imposteur').href = cfg.imposteurUrl;
+    document.getElementById('link-proba').href = cfg.probaUrl;
   </script>
 </body>
 </html>

@@ -14,6 +14,8 @@ services:
         value: https://paripotes.onrender.com
       - key: IMPOSTEUR_URL
         value: https://imposteur-mots.onrender.com
+      - key: PROBA_URL
+        value: https://proba-potes.onrender.com
 
   - type: web
     name: paripotes
@@ -57,3 +59,27 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+
+  - type: web
+    name: proba-potes
+    runtime: node
+    plan: free
+    rootDir: proba-potes
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: DATABASE_URL
+        sync: false
