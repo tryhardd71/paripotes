@@ -41,37 +41,38 @@ export async function sendOtp(email, code) {
   return Promise.race([sendOtpEmail(email, code), timeout]);
 }
 
-export function storeOtp(email, code) {
+export async function storeOtp(email, code) {
   const expires = new Date(Date.now() + OTP_TTL_MS).toISOString();
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO otp_codes (email, code, expires_at) VALUES (?, ?, ?)
     ON CONFLICT(email) DO UPDATE SET code = excluded.code, expires_at = excluded.expires_at
   `).run(email.toLowerCase().trim(), code, expires);
 }
 
-export function verifyOtp(email, code) {
-  const row = db.prepare('SELECT * FROM otp_codes WHERE email = ?').get(email.toLowerCase().trim());
+export async function verifyOtp(email, code) {
+  const normalized = email.toLowerCase().trim();
+  const row = await db.prepare('SELECT * FROM otp_codes WHERE email = ?').get(normalized);
   if (!row) return false;
   if (new Date(row.expires_at) < new Date()) {
-    db.prepare('DELETE FROM otp_codes WHERE email = ?').run(email.toLowerCase().trim());
+    await db.prepare('DELETE FROM otp_codes WHERE email = ?').run(normalized);
     return false;
   }
   if (row.code !== code.trim()) return false;
-  db.prepare('DELETE FROM otp_codes WHERE email = ?').run(email.toLowerCase().trim());
+  await db.prepare('DELETE FROM otp_codes WHERE email = ?').run(normalized);
   return true;
 }
 
-export function createSession(userId, rememberMe = true) {
+export async function createSession(userId, rememberMe = true) {
   const token = generateToken();
   const ttl = rememberMe ? SESSION_LONG_MS : SESSION_SHORT_MS;
   const expires = new Date(Date.now() + ttl).toISOString();
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expires);
+  await db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expires);
   return token;
 }
 
-export function getUserFromToken(token) {
+export async function getUserFromToken(token) {
   if (!token) return null;
-  const row = db.prepare(`
+  const row = await db.prepare(`
     SELECT u.* FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > datetime('now')
@@ -79,14 +80,14 @@ export function getUserFromToken(token) {
   return row || null;
 }
 
-export function getUserByEmail(email) {
-  return db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
+export async function getUserByEmail(email) {
+  return await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
 }
 
-export function authMiddleware(req, res, next) {
+export async function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
-  const user = getUserFromToken(token);
+  const user = await getUserFromToken(token);
   if (!user) return res.status(401).json({ error: 'Non connecté' });
   req.user = user;
   req.token = token;

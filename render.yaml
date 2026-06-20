@@ -27,3 +27,5 @@ services:
         sync: false
       - key: RESEND_FROM
         sync: false
+      - key: DATABASE_URL
+        sync: false
