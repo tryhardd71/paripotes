@@ -12,6 +12,14 @@
       rel="stylesheet"
     />
     <script src="/config.js"></script>
+    <script>
+      (function () {
+        var api = window.HUB_CONFIG && window.HUB_CONFIG.imposteurApi;
+        if (api) {
+          document.write('<script src="' + api + '/socket.io/socket.io.js"><\/script>');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div class="bg-glow"></div>
@@ -26,14 +34,6 @@
       </section>
       <main id="app"></main>
     </div>
-    <script id="imposteur-socket-js"></script>
-    <script>
-      (function () {
-        const api = window.HUB_CONFIG?.imposteurApi || '';
-        const s = document.getElementById('imposteur-socket-js');
-        s.src = api + '/socket.io/socket.io.js';
-      })();
-    </script>
     <script src="app.js" type="module"></script>
   </body>
 </html>

@@ -1,8 +1,15 @@
 import { VoiceCall } from './webrtc.js';
 
-const IMPOSTEUR_SERVER = window.HUB_CONFIG?.imposteurApi || undefined;
-const socket = io(IMPOSTEUR_SERVER);
 const app = document.getElementById('app');
+const IMPOSTEUR_SERVER = window.HUB_CONFIG?.imposteurApi || undefined;
+
+if (typeof io === 'undefined') {
+  app.innerHTML =
+    '<div class="card"><p class="error">Impossible de charger le jeu. Rafraîchis la page (Ctrl+F5).</p></div>';
+  throw new Error('Socket.io non chargé');
+}
+
+const socket = io(IMPOSTEUR_SERVER);
 
 let room = null;
 let myId = socket.id;
