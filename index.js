@@ -12,6 +12,10 @@ import {
   sendOtp,
   storeOtp,
   verifyOtp,
+  hashPassword,
+  verifyPassword,
+  getUserByEmail,
+  sanitizeUser,
 } from './auth.js';
 import { syncAll } from './sync.js';
 
@@ -27,50 +31,81 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
-app.post('/api/auth/send-code', async (req, res) => {
-  const { email } = req.body;
+app.get('/api/auth/check', (req, res) => {
+  const email = req.query.email?.toLowerCase().trim();
   if (!email?.includes('@')) return res.status(400).json({ error: 'Email invalide' });
+  const user = getUserByEmail(email);
+  res.json({
+    exists: !!user,
+    hasPassword: !!user?.password_hash,
+  });
+});
+
+app.post('/api/auth/send-code', async (req, res) => {
+  const { email, reset } = req.body;
+  if (!email?.includes('@')) return res.status(400).json({ error: 'Email invalide' });
+
+  const user = getUserByEmail(email);
+  if (user?.password_hash && !reset) {
+    return res.status(400).json({ error: 'Ce compte existe déjà. Connecte-toi avec ton mot de passe.' });
+  }
 
   const code = generateCode();
   storeOtp(email, code);
 
   try {
-    const result = await sendOtp(email, code);
-    res.json({
-      ok: true,
-      message: `Code envoyé à ${email} ! Vérifie ta boîte mail (et les spams).`,
-      ...(result.preview ? { previewUrl: result.preview } : {}),
-    });
+    await sendOtp(email, code);
+    res.json({ ok: true, message: `Code envoyé à ${email} ! Vérifie ta boîte mail (et les spams).` });
   } catch (err) {
     console.error('Email error:', err);
-    res.status(500).json({
-      error: err.message || 'Impossible d\'envoyer le code. Réessaie dans quelques instants.',
-    });
+    res.status(500).json({ error: err.message || 'Impossible d\'envoyer le code.' });
   }
 });
 
-app.post('/api/auth/verify', (req, res) => {
-  const { email, code, username } = req.body;
-  if (!email || !code) return res.status(400).json({ error: 'Email et code requis' });
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password, rememberMe = true } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' });
 
-  if (!verifyOtp(email, code)) {
-    return res.status(401).json({ error: 'Code invalide ou expiré' });
+  const user = getUserByEmail(email);
+  if (!user?.password_hash) {
+    return res.status(401).json({ error: 'Compte introuvable. Inscris-toi d\'abord.' });
   }
 
+  const ok = await verifyPassword(password, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'Mot de passe incorrect' });
+
+  const token = createSession(user.id, rememberMe !== false);
+  res.json({ token, user: sanitizeUser(user), rememberMe: rememberMe !== false });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const { email, code, username, password, rememberMe = true } = req.body;
+  if (!email || !code || !password) {
+    return res.status(400).json({ error: 'Email, code et mot de passe requis' });
+  }
+  if (password.length < 6) return res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' });
+  if (!verifyOtp(email, code)) return res.status(401).json({ error: 'Code invalide ou expiré' });
+
   const normalizedEmail = email.toLowerCase().trim();
-  let user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
+  let user = getUserByEmail(normalizedEmail);
+  const passHash = await hashPassword(password);
 
   if (!user) {
     const name = username?.trim() || normalizedEmail.split('@')[0];
-    const result = db.prepare('INSERT INTO users (email, username) VALUES (?, ?)').run(normalizedEmail, name);
+    const result = db.prepare('INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)')
+      .run(normalizedEmail, name, passHash);
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
-  } else if (username?.trim()) {
-    db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username.trim(), user.id);
-    user.username = username.trim();
+  } else {
+    if (username?.trim()) {
+      db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username.trim(), user.id);
+      user.username = username.trim();
+    }
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passHash, user.id);
+    user.password_hash = passHash;
   }
 
-  const token = createSession(user.id);
-  res.json({ token, user: { id: user.id, email: user.email, username: user.username } });
+  const token = createSession(user.id, rememberMe !== false);
+  res.json({ token, user: sanitizeUser(user), rememberMe: rememberMe !== false });
 });
 
 app.get('/api/me', authMiddleware, (req, res) => {

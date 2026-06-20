@@ -93,8 +93,18 @@ function execute(sql, params, mode) {
 
   if (s.startsWith('INSERT INTO users')) {
     const id = nextId('users');
-    data.users.push({ id, email: params[0], username: params[1], created_at: now() });
+    data.users.push({
+      id, email: params[0], username: params[1],
+      password_hash: params[2] || null,
+      created_at: now(),
+    });
     return { lastInsertRowid: id };
+  }
+
+  if (s.startsWith('UPDATE users SET password_hash')) {
+    const u = data.users.find((r) => r.id === params[1]);
+    if (u) u.password_hash = params[0];
+    return {};
   }
 
   if (s.includes('INSERT INTO otp_codes') && s.includes('ON CONFLICT')) {

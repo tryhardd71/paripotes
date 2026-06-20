@@ -36,82 +36,32 @@ function outcomeLabel(outcome, match) {
   return 'Match nul';
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// ─── Main app (auth dans auth.js) ─────────────────────────────────────────────
 
 const authScreen = document.getElementById('auth-screen');
 const mainScreen = document.getElementById('main-screen');
 
-document.getElementById('send-code-btn').onclick = async () => {
-  const email = document.getElementById('email-input').value.trim();
-  if (!email) return showAuthError('Entre ton email');
-  const btn = document.getElementById('send-code-btn');
-  btn.disabled = true;
-  btn.textContent = 'Envoi en cours...';
-  try {
-    const res = await fetch('/api/auth/send-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || data.error);
-
-    document.getElementById('step-email').classList.add('hidden');
-    document.getElementById('step-code').classList.remove('hidden');
-    document.getElementById('email-display').textContent = email;
-    hideAuthError();
-    document.getElementById('code-input').focus();
-    toast('Code envoyé ! Vérifie ta boîte mail.');
-  } catch (e) {
-    showAuthError(e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Recevoir mon code';
-  }
-};
-
-document.getElementById('verify-btn').onclick = async () => {
-  const email = document.getElementById('email-input').value.trim();
-  const code = document.getElementById('code-input').value.trim();
-  const username = document.getElementById('username-input').value.trim();
-  if (!code) return showAuthError('Entre le code');
-  try {
-    const data = await api('/api/auth/verify', {
-      method: 'POST',
-      body: JSON.stringify({ email, code, username }),
-    });
-    token = data.token;
-    user = data.user;
-    localStorage.setItem('pp_token', token);
-    showMain();
-  } catch (e) {
-    showAuthError(e.message);
-  }
-};
-
-document.getElementById('back-email-btn').onclick = () => {
-  document.getElementById('step-code').classList.add('hidden');
-  document.getElementById('step-email').classList.remove('hidden');
-  hideAuthError();
-};
-
-document.getElementById('logout-btn').onclick = async () => {
-  try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
-  token = null;
-  user = null;
-  localStorage.removeItem('pp_token');
-  authScreen.classList.remove('hidden');
-  mainScreen.classList.add('hidden');
-};
-
-function showAuthError(msg) {
-  const el = document.getElementById('auth-error');
-  el.textContent = msg;
-  el.classList.remove('hidden');
+function showMain() {
+  authScreen.classList.add('hidden');
+  mainScreen.classList.remove('hidden');
+  document.getElementById('user-badge').textContent = user.username;
+  loadLeagues().then(() => {
+    if (leagues.length) selectLeague(leagues[0].id);
+  });
 }
-function hideAuthError() {
-  document.getElementById('auth-error').classList.add('hidden');
-}
+
+(async () => {
+  if (token) {
+    try {
+      const data = await api('/api/me');
+      user = data.user;
+      showMain();
+    } catch {
+      localStorage.removeItem('pp_token');
+      token = null;
+    }
+  }
+})();
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -504,25 +454,3 @@ function esc(str) {
   return d.innerHTML;
 }
 
-async function showMain() {
-  authScreen.classList.add('hidden');
-  mainScreen.classList.remove('hidden');
-  document.getElementById('user-badge').textContent = user.username;
-  await loadLeagues();
-  if (leagues.length) selectLeague(leagues[0].id);
-}
-
-// ─── Init ─────────────────────────────────────────────────────────────────────
-
-(async () => {
-  if (token) {
-    try {
-      const data = await api('/api/me');
-      user = data.user;
-      showMain();
-    } catch {
-      localStorage.removeItem('pp_token');
-      token = null;
-    }
-  }
-})();

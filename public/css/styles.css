@@ -65,6 +65,21 @@ body {
   margin-top: 16px;
 }
 .auth-step label:first-of-type { margin-top: 0; }
+.auth-tabs {
+  display: flex; gap: 8px; margin-bottom: 20px;
+  background: var(--surface2); padding: 4px; border-radius: 12px;
+}
+.auth-tab {
+  flex: 1; padding: 10px; border: none; border-radius: 10px;
+  background: transparent; color: var(--muted);
+  font-family: inherit; font-weight: 600; font-size: .9rem; cursor: pointer;
+}
+.auth-tab.active { background: var(--accent); color: #052e16; }
+.remember-row {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 0 4px; font-size: .85rem; color: var(--muted); cursor: pointer;
+}
+.remember-row input { width: auto; margin: 0; accent-color: var(--accent); }
 .auth-step input {
   width: 100%;
   padding: 14px 16px;

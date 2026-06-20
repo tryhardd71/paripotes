@@ -19,21 +19,64 @@
           <p class="tagline">Paris entre potes — CDM 2026</p>
         </div>
 
-        <div id="step-email" class="auth-step">
-          <label>Ton email</label>
-          <input type="email" id="email-input" placeholder="pote@email.com" autocomplete="email">
-          <button id="send-code-btn" class="btn btn-primary">Recevoir mon code</button>
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" id="show-login">Connexion</button>
+          <button type="button" class="auth-tab" id="show-register">Inscription</button>
         </div>
 
-        <div id="step-code" class="auth-step hidden">
-          <p class="hint" id="code-sent-hint">On t'a envoyé un code à 6 chiffres sur <strong id="email-display"></strong></p>
-          <p class="hint" style="font-size:.8rem;margin-top:-8px;color:var(--muted)">Vérifie tes spams si tu ne le vois pas.</p>
-          <label>Entre ton code</label>
+        <!-- Connexion -->
+        <div id="panel-login" class="auth-step">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="pote@email.com" autocomplete="email">
+          <label>Mot de passe</label>
+          <input type="password" id="login-password" placeholder="Ton mot de passe" autocomplete="current-password">
+          <label class="remember-row">
+            <input type="checkbox" id="remember-me" checked>
+            <span>Se souvenir de moi</span>
+          </label>
+          <button id="login-btn" class="btn btn-primary">Se connecter</button>
+          <button type="button" id="forgot-btn" class="btn btn-ghost btn-sm">Mot de passe oublié ?</button>
+        </div>
+
+        <!-- Inscription étape 1 -->
+        <div id="panel-register-email" class="auth-step hidden">
+          <label>Ton email</label>
+          <input type="email" id="register-email" placeholder="pote@email.com" autocomplete="email">
+          <button id="send-code-btn" class="btn btn-primary">Recevoir mon code</button>
+          <label class="remember-row">
+            <input type="checkbox" id="remember-me-register" checked>
+            <span>Se souvenir de moi</span>
+          </label>
+        </div>
+
+        <!-- Inscription étape 2 -->
+        <div id="panel-register-code" class="auth-step hidden">
+          <p class="hint">Code envoyé à <strong id="email-display"></strong></p>
+          <p class="hint" style="font-size:.8rem;margin-top:-8px;color:var(--muted)">Vérifie tes spams.</p>
+          <label>Code à 6 chiffres</label>
           <input type="text" id="code-input" placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
-          <label>Pseudo (pour le classement)</label>
+          <label>Pseudo</label>
           <input type="text" id="username-input" placeholder="Ton pseudo" maxlength="20">
-          <button id="verify-btn" class="btn btn-primary">C'est parti !</button>
-          <button id="back-email-btn" class="btn btn-ghost">Changer d'email</button>
+          <label>Mot de passe (6 caractères min.)</label>
+          <input type="password" id="register-password" placeholder="Choisis un mot de passe" autocomplete="new-password">
+          <button id="register-btn" class="btn btn-primary">Créer mon compte</button>
+          <button type="button" id="back-register-btn" class="btn btn-ghost">Retour</button>
+        </div>
+
+        <!-- Mot de passe oublié -->
+        <div id="panel-forgot" class="auth-step hidden">
+          <p class="hint">On t'envoie un code pour réinitialiser ton mot de passe.</p>
+          <label>Email</label>
+          <input type="email" id="forgot-email" placeholder="pote@email.com">
+          <button id="forgot-send-btn" class="btn btn-primary">Envoyer le code</button>
+          <div id="forgot-reset-fields" class="hidden">
+            <label>Code</label>
+            <input type="text" id="forgot-code" placeholder="123456" maxlength="6">
+            <label>Nouveau mot de passe</label>
+            <input type="password" id="forgot-password" placeholder="Nouveau mot de passe">
+            <button id="forgot-reset-btn" class="btn btn-primary">Réinitialiser</button>
+          </div>
+          <button type="button" id="back-login-btn" class="btn btn-ghost">Retour connexion</button>
         </div>
 
         <p id="auth-error" class="error hidden"></p>
@@ -128,6 +171,7 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
+  <script src="/js/auth.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
