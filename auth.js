@@ -36,7 +36,7 @@ export async function verifyPassword(password, stored) {
 
 export async function sendOtp(email, code) {
   const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Envoi email trop long — réessaie')), 20000)
+    setTimeout(() => reject(new Error('Envoi email trop long — réessaie')), 15000)
   );
   return Promise.race([sendOtpEmail(email, code), timeout]);
 }

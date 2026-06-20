@@ -1,7 +1,5 @@
 import nodemailer from 'nodemailer';
 
-let cachedTransporter = null;
-
 function buildOtpHtml(code) {
   return `
     <div style="font-family:'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f172a;color:#f8fafc;border-radius:16px">
@@ -72,38 +70,52 @@ function cleanAppPassword(pass) {
   return (pass || '').replace(/[\s-]/g, '');
 }
 
-function getSmtpTransporter() {
-  if (cachedTransporter) return cachedTransporter;
+function smtpAuth() {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
-
-  cachedTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
-    requireTLS: true,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    auth: {
-      user: process.env.SMTP_USER.trim(),
-      pass: cleanAppPassword(process.env.SMTP_PASS),
-    },
-  });
-  return cachedTransporter;
+  return {
+    user: process.env.SMTP_USER.trim(),
+    pass: cleanAppPassword(process.env.SMTP_PASS),
+  };
 }
 
 async function sendViaSmtp(to, subject, text, html) {
-  const transport = getSmtpTransporter();
-  if (!transport) return null;
+  const auth = smtpAuth();
+  if (!auth) return null;
 
-  await transport.sendMail({
-    from: process.env.SMTP_FROM || `PariPotes <${process.env.SMTP_USER}>`,
-    to,
-    subject,
-    text,
-    html,
-  });
-  return { method: 'smtp' };
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const attempts = [
+    { port: Number(process.env.SMTP_PORT || 587), secure: false, requireTLS: true },
+    { port: 465, secure: true, requireTLS: false },
+  ];
+
+  let lastError = null;
+  for (const cfg of attempts) {
+    try {
+      const transport = nodemailer.createTransport({
+        host,
+        port: cfg.port,
+        secure: cfg.secure,
+        requireTLS: cfg.requireTLS,
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 12000,
+        auth,
+      });
+      await transport.sendMail({
+        from: process.env.SMTP_FROM || `PariPotes <${process.env.SMTP_USER}>`,
+        to,
+        subject,
+        text,
+        html,
+      });
+      transport.close();
+      return { method: `smtp:${cfg.port}` };
+    } catch (err) {
+      lastError = err;
+      console.warn(`SMTP ${cfg.port} failed:`, err.message);
+    }
+  }
+  throw lastError || new Error('SMTP indisponible');
 }
 
 export async function sendOtpEmail(to, code) {
@@ -111,7 +123,8 @@ export async function sendOtpEmail(to, code) {
   const text = `Salut !\n\nTon code de connexion PariPotes : ${code}\n\nIl expire dans 10 minutes.\n\nBons paris entre potes ! ⚽`;
   const html = buildOtpHtml(code);
 
-  const methods = [sendViaBrevo, sendViaResend, sendViaSmtp];
+  // API HTTP d'abord (fiable sur Render), SMTP en dernier recours (souvent bloqué)
+  const methods = [sendViaResend, sendViaBrevo, sendViaSmtp];
   let lastError = null;
 
   for (const method of methods) {

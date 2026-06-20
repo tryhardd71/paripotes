@@ -53,7 +53,8 @@
         <!-- Inscription étape 2 -->
         <div id="panel-register-code" class="auth-step hidden">
           <p class="hint">Code envoyé à <strong id="email-display"></strong></p>
-          <p class="hint" style="font-size:.8rem;margin-top:-8px;color:var(--muted)">Vérifie tes spams.</p>
+          <p class="hint" style="font-size:.8rem;margin-top:-8px;color:var(--muted)">Vérifie tes spams. Pas reçu ? Attends 1 min puis renvoie.</p>
+          <button type="button" id="resend-code-btn" class="btn btn-ghost btn-sm">Renvoyer le code</button>
           <label>Code à 6 chiffres</label>
           <input type="text" id="code-input" placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
           <label>Pseudo</label>

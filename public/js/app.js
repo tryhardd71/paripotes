@@ -147,34 +147,58 @@ async function handleLogin() {
   }
 }
 
-async function handleSendCode() {
-  const email = document.getElementById('register-email').value.trim();
-  if (!email) return showAuthError('Entre ton email');
-  const btn = document.getElementById('send-code-btn');
-  btn.disabled = true;
-  btn.textContent = 'Envoi en cours...';
+async function requestCode(email, { sync = false, btn = null, busyLabel = 'Envoi...', idleLabel = 'Recevoir mon code' } = {}) {
+  if (!email?.includes('@')) return showAuthError('Entre un email valide');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = busyLabel;
+  }
   hideAuthError();
   try {
-    const check = await fetchWithTimeout(`/api/auth/check?email=${encodeURIComponent(email)}`);
-    if (check.exists && check.hasPassword) {
-      goToLogin(email, 'Compte déjà créé — connecte-toi avec ton mot de passe (pas besoin de code).');
-      return;
-    }
-    await fetchWithTimeout('/api/auth/send-code', {
+    const data = await fetchWithTimeout('/api/auth/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
+      body: JSON.stringify({ email, sync }),
+    }, sync ? 25000 : 15000);
     document.getElementById('email-display').textContent = email;
     showAuthPanel('panel-register-code');
     document.getElementById('code-input').focus();
-    toast('Code envoyé ! Vérifie ta boîte mail.');
+    toast(data.message || 'Code envoyé ! Vérifie ta boîte mail.');
+    return true;
   } catch (e) {
-    showAuthError(e.message);
+    const msg = e.message || 'Erreur envoi';
+    if (msg.includes('déjà') || msg.includes('Connecte-toi')) {
+      goToLogin(email, msg);
+      return false;
+    }
+    showAuthError(msg);
+    return false;
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Recevoir mon code';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = idleLabel;
+    }
   }
+}
+
+async function handleSendCode() {
+  const email = document.getElementById('register-email').value.trim();
+  if (!email) return showAuthError('Entre ton email');
+  await requestCode(email, {
+    btn: document.getElementById('send-code-btn'),
+    busyLabel: 'Envoi en cours...',
+    idleLabel: 'Recevoir mon code',
+  });
+}
+
+async function handleResendCode() {
+  const email = document.getElementById('register-email').value.trim();
+  await requestCode(email, {
+    sync: true,
+    btn: document.getElementById('resend-code-btn'),
+    busyLabel: 'Renvoi...',
+    idleLabel: 'Renvoyer le code',
+  });
 }
 
 async function handleRegister() {
@@ -217,8 +241,8 @@ async function handleForgotSend() {
     await fetchWithTimeout('/api/auth/send-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, reset: true }),
-    });
+      body: JSON.stringify({ email, reset: true, sync: true }),
+    }, 25000);
     document.getElementById('forgot-reset-fields').classList.remove('hidden');
     toast('Code envoyé !');
   } catch (e) {
@@ -272,6 +296,9 @@ function initAuth() {
         break;
       case 'send-code-btn':
         handleSendCode();
+        break;
+      case 'resend-code-btn':
+        handleResendCode();
         break;
       case 'register-btn':
         handleRegister();

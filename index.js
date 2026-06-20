@@ -66,13 +66,26 @@ app.post('/api/auth/send-code', async (req, res) => {
 
   const code = generateCode();
   storeOtp(email, code);
+  const message = `Code envoyé à ${email} ! Vérifie ta boîte mail (et les spams).`;
+
+  // Répondre tout de suite — Gmail SMTP depuis Render peut prendre 10s+ ou timeout
+  if (!req.body.sync) {
+    res.json({ ok: true, message });
+    sendOtp(email, code).catch((err) => {
+      console.error('Email async error:', email, err.message);
+    });
+    return;
+  }
 
   try {
     await sendOtp(email, code);
-    res.json({ ok: true, message: `Code envoyé à ${email} ! Vérifie ta boîte mail (et les spams).` });
+    res.json({ ok: true, message });
   } catch (err) {
     console.error('Email error:', err);
-    res.status(500).json({ error: err.message || 'Impossible d\'envoyer le code.' });
+    const msg = err.message?.includes('timeout') || err.message?.includes('Timeout')
+      ? 'Impossible d\'envoyer l\'email depuis le serveur. Ajoute RESEND_API_KEY sur Render (gratuit) ou réessaie.'
+      : (err.message || 'Impossible d\'envoyer le code.');
+    res.status(500).json({ error: msg });
   }
 });
 
