@@ -19,26 +19,43 @@ function getSenderEmail() {
   return process.env.BREVO_SENDER_EMAIL || process.env.SMTP_USER || process.env.EMAIL_FROM;
 }
 
+async function fetchWithTimeout(url, opts, ms = 10000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function sendViaBrevo(to, subject, text, html) {
   const apiKey = process.env.BREVO_API_KEY;
-  const sender = getSenderEmail();
+  const sender = process.env.BREVO_SENDER_EMAIL || getSenderEmail();
   if (!apiKey || !sender) return null;
 
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sender: { name: 'PariPotes', email: sender },
-      to: [{ email: to }],
-      subject,
-      textContent: text,
-      htmlContent: html,
-    }),
-  });
+  let res;
+  try {
+    res = await fetchWithTimeout('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: 'PariPotes', email: sender },
+        to: [{ email: to }],
+        subject,
+        textContent: text,
+        htmlContent: html,
+      }),
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Brevo met trop de temps à répondre');
+    throw e;
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Erreur Brevo ${res.status}`);
+    const detail = err.message || err.error || `Erreur Brevo ${res.status}`;
+    throw new Error(detail);
   }
   return { method: 'brevo' };
 }
@@ -126,8 +143,9 @@ export async function sendOtpEmail(to, code) {
   const text = `Salut !\n\nTon code de connexion PariPotes : ${code}\n\nIl expire dans 10 minutes.\n\nBons paris entre potes ! ⚽`;
   const html = buildOtpHtml(code);
 
-  // Brevo en premier : gratuit, marche vers n'importe quel email (expéditeur vérifié)
-  const methods = [sendViaBrevo, sendViaResend, sendViaSmtp];
+  // Brevo en premier. SMTP ignoré si Brevo configuré (bloqué sur Render de toute façon)
+  const methods = [sendViaBrevo, sendViaResend];
+  if (!process.env.BREVO_API_KEY) methods.push(sendViaSmtp);
   let lastError = null;
 
   for (const method of methods) {
