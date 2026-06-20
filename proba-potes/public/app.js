@@ -1,50 +1,86 @@
-const socket = io();
-const app = document.getElementById('app');
+const TOKEN_KEY = 'proba_token';
+const EMAIL_KEY = 'proba_email';
 
-let room = null;
-let myKey = null;
-let errorMsg = '';
+let token = localStorage.getItem(TOKEN_KEY);
+let user = null;
+let forum = null;
+let socket = null;
 let forumFilter = 'all';
 let showNewTopic = false;
 
-const STORAGE_KEY = 'proba_potes_session';
+const authScreen = document.getElementById('auth-screen');
+const forumScreen = document.getElementById('forum-screen');
+const app = document.getElementById('app');
 
-socket.on('connect', async () => {
-  const saved = loadSession();
-  if (saved && !room) {
-    const res = await emit('join_room', saved);
-    if (!res.error) {
-      myKey = res.playerKey;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-      return;
-    }
-    localStorage.removeItem(STORAGE_KEY);
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...opts.headers };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(path, { ...opts, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+  return data;
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function hideAuthError() {
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+function showAuthPanel(id) {
+  ['panel-login', 'panel-register-email', 'panel-register-code'].forEach((p) => {
+    document.getElementById(p).classList.toggle('hidden', p !== id);
+  });
+}
+
+function showAuth() {
+  authScreen.classList.remove('hidden');
+  forumScreen.classList.add('hidden');
+  if (socket) {
+    socket.disconnect();
+    socket = null;
   }
-  render();
-});
+}
 
-socket.on('room_update', (data) => {
-  room = data;
-  myKey = data.myKey ?? myKey;
-  render();
-});
+function showForum() {
+  authScreen.classList.add('hidden');
+  forumScreen.classList.remove('hidden');
+}
 
-function loadSession() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY));
-  } catch {
-    return null;
-  }
+function saveSession(data) {
+  token = data.token;
+  user = data.user;
+  localStorage.setItem(TOKEN_KEY, token);
+  if (data.user?.email) localStorage.setItem(EMAIL_KEY, data.user.email);
+}
+
+function connectSocket() {
+  if (socket) socket.disconnect();
+  socket = io({ auth: { token } });
+
+  socket.on('connect_error', () => {
+    token = null;
+    localStorage.removeItem(TOKEN_KEY);
+    showAuth();
+    showAuthError('Session expirée — reconnecte-toi.');
+  });
+
+  socket.on('forum_update', (data) => {
+    user = data.user;
+    forum = data;
+    renderForum();
+  });
 }
 
 function emit(event, payload) {
   return new Promise((resolve) => {
+    if (!socket) return resolve({ error: 'Non connecté' });
     socket.emit(event, payload, (res) => resolve(res ?? {}));
   });
-}
-
-function getPlayerName(key) {
-  return room?.players?.find((p) => p.key === key)?.name ?? '?';
 }
 
 function formatDate(ts) {
@@ -65,85 +101,39 @@ function verdictLabel(v) {
 }
 
 function filterProbas(probas) {
+  if (!user) return probas;
   return probas.filter((p) => {
     if (forumFilter === 'open') return p.state === 'open';
-    if (forumFilter === 'mine') return p.creatorKey === myKey || p.accepterKey === myKey;
+    if (forumFilter === 'mine') return p.creatorId === user.id || p.accepterId === user.id;
     if (forumFilter === 'action') return p.waitingForMe;
     return true;
   });
 }
 
-function renderHome() {
-  const saved = loadSession();
-  return `
-    <h1>Proba Potes</h1>
-    <p class="subtitle">Forum de probas entre potes — joue quand tu veux</p>
-    ${errorMsg ? `<div class="error">${errorMsg}</div>` : ''}
-    ${
-      saved
-        ? `<div class="card"><p class="rules">Reconnexion au forum <strong>${saved.code}</strong> en cours…</p></div>`
-        : ''
-    }
-    <div class="card">
-      <h2>Créer un forum</h2>
-      <label>Ton pseudo (unique dans le forum)</label>
-      <input id="create-name" placeholder="Ex: Rayan" maxlength="20" />
-      <button class="btn btn-primary" id="btn-create">Créer le forum</button>
-    </div>
-    <div class="divider">ou</div>
-    <div class="card">
-      <h2>Rejoindre un forum</h2>
-      <label>Code du forum</label>
-      <input id="join-code" placeholder="Ex: PROBA" maxlength="8" style="text-transform:uppercase" />
-      <label>Ton pseudo</label>
-      <input id="join-name" placeholder="Ex: Sarah" maxlength="20" />
-      <button class="btn btn-secondary" id="btn-join">Rejoindre</button>
-    </div>
-    <div class="card">
-      <h2>Comment ça marche</h2>
-      <ul class="rules">
-        <li>Chacun <strong>dépose un sujet</strong> (proba + cote + reverse)</li>
-        <li>N'importe qui peut <strong>accepter</strong>, même plus tard</li>
-        <li>Ensuite chacun choisit son nombre <strong>quand il veut</strong> — l'autre ne le voit pas</li>
-        <li>Quand les deux ont joué → <strong>révélation</strong> : gagné / perdu / égalité</li>
-      </ul>
-    </div>
-  `;
-}
-
 function renderPickPanel(proba) {
   if (proba.state !== 'picking') return '';
-
-  if (proba.myHasPlayed && proba.waitingForOther) {
-    return `
-      <div class="thread-reply pick-waiting">
-        <p>✓ Ton nombre est enregistré (<strong>${proba.myPick}</strong>).</p>
-        <p class="rules">L'autre n'a pas encore joué — tu peux te déconnecter, il sera notifié à ta prochaine visite.</p>
-      </div>`;
+  if (proba.waitingForOther) {
+    return `<div class="thread-reply pick-waiting">
+      <p>✓ Ton nombre est enregistré (<strong>${proba.myPick}</strong>).</p>
+      <p class="rules">L'autre n'a pas encore joué — reviens plus tard.</p>
+    </div>`;
   }
-
   if (!proba.waitingForMe) return '';
-
   const val = Math.floor(proba.currentCote / 2);
   return `
     <div class="thread-reply pick-form">
-      <p><strong>Tour ${proba.round}</strong> — choisis ton nombre secret (0 à ${proba.currentCote})</p>
+      <p><strong>Tour ${proba.round}</strong> — nombre secret entre 0 et ${proba.currentCote}</p>
       <div class="pick-range" id="pick-display-${proba.id}">${val}</div>
       <input type="range" class="pick-slider" data-proba="${proba.id}" min="0" max="${proba.currentCote}" value="${val}" step="1" />
       <button class="btn btn-primary btn-sm btn-submit-pick" data-proba="${proba.id}">Enregistrer mon nombre</button>
-    </div>
-  `;
+    </div>`;
 }
 
 function renderReveal(proba) {
-  const isParticipant = proba.creatorKey === myKey || proba.accepterKey === myKey;
+  const isParticipant = proba.creatorId === user?.id || proba.accepterId === user?.id;
   if (!isParticipant) return '';
-
-  const revealed =
-    proba.state === 'done' ||
-    (proba.creatorPick != null && proba.accepterPick != null);
-
-  if (!revealed) return '';
+  const revealed = proba.creatorPick != null && proba.accepterPick != null;
+  if (!revealed && proba.state !== 'done') return '';
 
   const verdict = verdictLabel(proba.myVerdict);
   const verdictHtml = verdict
@@ -156,20 +146,16 @@ function renderReveal(proba) {
     <div class="thread-reply reveal-box">
       <p class="reveal-title">Révélation</p>
       <div class="reveal-numbers">
-        <span>${getPlayerName(proba.creatorKey)} : <strong>${proba.creatorPick}</strong></span>
-        <span>${getPlayerName(proba.accepterKey)} : <strong>${proba.accepterPick}</strong></span>
+        <span>${proba.creatorName} : <strong>${proba.creatorPick ?? '?'}</strong></span>
+        <span>${proba.accepterName ?? '?'} : <strong>${proba.accepterPick ?? '?'}</strong></span>
       </div>
       ${verdictHtml}
       ${proba.result?.message ? `<p class="rules" style="margin-top:8px">${proba.result.message}</p>` : ''}
-    </div>
-  `;
+    </div>`;
 }
 
 function renderThread(proba) {
-  const isCreator = proba.creatorKey === myKey;
-  const isParticipant = isCreator || proba.accepterKey === myKey;
-  const initial = getPlayerName(proba.creatorKey).charAt(0).toUpperCase();
-
+  const isCreator = proba.creatorId === user?.id;
   let status = 'Ouvert';
   let statusCls = 'open';
   if (proba.state === 'picking') {
@@ -185,19 +171,12 @@ function renderThread(proba) {
       ? `<button class="btn btn-primary btn-sm" data-accept="${proba.id}">Accepter ce pari</button>`
       : '';
 
-  const myPickHint =
-    isParticipant && proba.myHasPlayed && proba.state === 'picking' && !proba.waitingForMe
-      ? ''
-      : isParticipant && proba.myHasPlayed
-        ? `<span class="my-pick-hint">Ton nombre : ${proba.myPick} (secret jusqu'à révélation)</span>`
-        : '';
-
   return `
-    <article class="thread" data-thread="${proba.id}">
+    <article class="thread">
       <div class="thread-head">
-        <div class="avatar">${initial}</div>
+        <div class="avatar">${(proba.creatorName || '?').charAt(0).toUpperCase()}</div>
         <div class="thread-meta">
-          <strong>${getPlayerName(proba.creatorKey)}</strong>
+          <strong>${proba.creatorName}</strong>
           <span class="thread-date">${formatDate(proba.createdAt)}</span>
         </div>
         <span class="thread-status status-${statusCls}">${status}</span>
@@ -206,38 +185,37 @@ function renderThread(proba) {
       <div class="thread-tags">
         <span>Cote ${proba.initialCote}</span>
         <span>${proba.reverse ? 'Reverse' : 'Sans reverse'}</span>
-        ${proba.accepterKey ? `<span>vs ${getPlayerName(proba.accepterKey)}</span>` : '<span>En attente d\'un accepteur</span>'}
+        ${proba.accepterName ? `<span>vs ${proba.accepterName}</span>` : '<span>En attente d\'un accepteur</span>'}
         ${proba.state === 'picking' ? `<span>Tour ${proba.round} · cote ${proba.currentCote}</span>` : ''}
       </div>
       ${proba.result?.outcome === 'reverse_next_round' && proba.state === 'picking'
         ? `<div class="thread-reply interim">${proba.result.message}</div>`
         : ''}
       ${acceptBtn}
-      ${myPickHint}
-      ${isParticipant ? renderPickPanel(proba) : ''}
+      ${renderPickPanel(proba)}
       ${renderReveal(proba)}
-    </article>
-  `;
+    </article>`;
 }
 
 function renderForum() {
-  const probas = filterProbas(room.probas ?? []);
-  const pendingCount = (room.probas ?? []).filter((p) => p.waitingForMe).length;
+  if (!forum || !user) return;
+  const probas = filterProbas(forum.probas ?? []);
+  const pending = (forum.probas ?? []).filter((p) => p.waitingForMe).length;
 
-  return `
+  app.innerHTML = `
     <header class="forum-header">
       <div>
-        <h1>Forum Proba</h1>
-        <p class="subtitle">Code : <strong>${room.code}</strong> · ${room.players.length} membre(s)</p>
+        <h1>Forum public</h1>
+        <p class="subtitle">Connecté en tant que <strong>${user.username}</strong></p>
       </div>
-      <button class="btn btn-secondary btn-sm" id="btn-copy">Copier le code</button>
+      <button class="btn btn-secondary btn-sm" id="logout-btn">Déconnexion</button>
     </header>
 
     <div class="forum-filters">
       <button class="filter-btn ${forumFilter === 'all' ? 'active' : ''}" data-filter="all">Tous</button>
       <button class="filter-btn ${forumFilter === 'open' ? 'active' : ''}" data-filter="open">Ouverts</button>
       <button class="filter-btn ${forumFilter === 'mine' ? 'active' : ''}" data-filter="mine">Mes paris</button>
-      <button class="filter-btn ${forumFilter === 'action' ? 'active' : ''}" data-filter="action">À jouer${pendingCount ? ` (${pendingCount})` : ''}</button>
+      <button class="filter-btn ${forumFilter === 'action' ? 'active' : ''}" data-filter="action">À jouer${pending ? ` (${pending})` : ''}</button>
     </div>
 
     <button class="btn btn-primary" id="btn-toggle-topic">${showNewTopic ? 'Fermer' : '+ Nouveau sujet'}</button>
@@ -248,83 +226,53 @@ function renderForum() {
         <label>Ton pari</label>
         <textarea id="proba-desc" placeholder="Ex: Le PSG gagne ce soir" maxlength="120"></textarea>
         <label>Cote (0 à X)</label>
-        <input type="number" id="proba-cote" min="${room.minCote}" max="${room.maxCote}" value="10" />
+        <input type="number" id="proba-cote" min="${forum.minCote}" max="${forum.maxCote}" value="10" />
         <label class="toggle-row">
           <input type="checkbox" id="proba-reverse" checked />
-          <span>Reverse — si nombres différents au tour 1, tour 2 pour l'accepteur (cote ÷ 2)</span>
+          <span>Reverse — tour 2 pour l'accepteur si nombres différents (cote ÷ 2)</span>
         </label>
-        <button class="btn btn-primary" id="btn-create-proba">Publier sur le forum</button>
+        <button class="btn btn-primary" id="btn-create-proba">Publier</button>
       </div>
     </div>
 
     <section class="thread-list">
-      ${probas.length === 0 ? '<div class="card"><p class="rules">Aucun sujet ici. Dépose le premier !</p></div>' : ''}
-      ${probas.map((p) => renderThread(p)).join('')}
-    </section>
-  `;
-}
+      ${probas.length === 0 ? '<div class="card"><p class="rules">Aucun sujet. Dépose le premier !</p></div>' : ''}
+      ${probas.map(renderThread).join('')}
+    </section>`;
 
-function render() {
-  if (!room) {
-    app.innerHTML = renderHome();
-    bindHomeEvents();
-    return;
-  }
-  app.innerHTML = renderForum();
   bindForumEvents();
 }
 
-function bindHomeEvents() {
-  document.getElementById('btn-create')?.addEventListener('click', async () => {
-    errorMsg = '';
-    const name = document.getElementById('create-name')?.value;
-    const res = await emit('create_room', { playerName: name });
-    if (res.error) {
-      errorMsg = res.error;
-      render();
-      return;
-    }
-    myKey = res.playerKey;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: res.code, playerName: name.trim() }));
-  });
-
-  document.getElementById('btn-join')?.addEventListener('click', async () => {
-    errorMsg = '';
-    const code = document.getElementById('join-code')?.value;
-    const name = document.getElementById('join-name')?.value;
-    const res = await emit('join_room', { code, playerName: name });
-    if (res.error) {
-      errorMsg = res.error;
-      render();
-      return;
-    }
-    myKey = res.playerKey;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ code: code.toUpperCase(), playerName: name.trim() }));
-  });
-}
-
 function bindForumEvents() {
-  document.getElementById('btn-copy')?.addEventListener('click', () => {
-    navigator.clipboard?.writeText(room.code);
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    token = null;
+    user = null;
+    forum = null;
+    localStorage.removeItem(TOKEN_KEY);
+    showAuth();
   });
 
   document.getElementById('btn-toggle-topic')?.addEventListener('click', () => {
     showNewTopic = !showNewTopic;
-    render();
+    renderForum();
   });
 
   document.querySelectorAll('.filter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       forumFilter = btn.dataset.filter;
-      render();
+      renderForum();
     });
   });
 
   document.getElementById('btn-create-proba')?.addEventListener('click', async () => {
-    const description = document.getElementById('proba-desc')?.value;
-    const cote = document.getElementById('proba-cote')?.value;
-    const reverse = document.getElementById('proba-reverse')?.checked;
-    const res = await emit('create_proba', { description, cote, reverse });
+    const res = await emit('create_proba', {
+      description: document.getElementById('proba-desc')?.value,
+      cote: document.getElementById('proba-cote')?.value,
+      reverse: document.getElementById('proba-reverse')?.checked,
+    });
     if (res.error) alert(res.error);
     else {
       showNewTopic = false;
@@ -334,16 +282,16 @@ function bindForumEvents() {
 
   document.querySelectorAll('.pick-slider').forEach((slider) => {
     slider.addEventListener('input', () => {
-      const display = document.getElementById(`pick-display-${slider.dataset.proba}`);
-      if (display) display.textContent = slider.value;
+      const el = document.getElementById(`pick-display-${slider.dataset.proba}`);
+      if (el) el.textContent = slider.value;
     });
   });
 
   document.querySelectorAll('.btn-submit-pick').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const probaId = btn.dataset.proba;
-      const slider = document.querySelector(`.pick-slider[data-proba="${probaId}"]`);
-      const res = await emit('submit_pick', { probaId, number: slider?.value });
+      const id = btn.dataset.proba;
+      const slider = document.querySelector(`.pick-slider[data-proba="${id}"]`);
+      const res = await emit('submit_pick', { probaId: id, number: slider?.value });
       if (res.error) alert(res.error);
     });
   });
@@ -356,4 +304,109 @@ function bindForumEvents() {
   });
 }
 
-render();
+// ─── Auth UI ────────────────────────────────────────────────────────────────
+
+document.getElementById('show-login')?.addEventListener('click', () => {
+  document.getElementById('show-login').classList.add('active');
+  document.getElementById('show-register').classList.remove('active');
+  showAuthPanel('panel-login');
+  hideAuthError();
+  const saved = localStorage.getItem(EMAIL_KEY);
+  if (saved) document.getElementById('login-email').value = saved;
+});
+
+document.getElementById('show-register')?.addEventListener('click', () => {
+  document.getElementById('show-register').classList.add('active');
+  document.getElementById('show-login').classList.remove('active');
+  showAuthPanel('panel-register-email');
+  hideAuthError();
+});
+
+document.getElementById('login-btn')?.addEventListener('click', async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  try {
+    const data = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, rememberMe: document.getElementById('remember-me').checked }),
+    });
+    saveSession(data);
+    showForum();
+    connectSocket();
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('send-code-btn')?.addEventListener('click', async () => {
+  const email = document.getElementById('register-email').value.trim();
+  if (!email) return showAuthError('Entre ton email');
+  const btn = document.getElementById('send-code-btn');
+  btn.disabled = true;
+  try {
+    const check = await api(`/api/auth/check?email=${encodeURIComponent(email)}`);
+    if (check.exists && check.hasPassword) {
+      document.getElementById('show-login').click();
+      document.getElementById('login-email').value = email;
+      return showAuthError('Compte déjà créé — connecte-toi avec ton mot de passe.');
+    }
+    await api('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) });
+    document.getElementById('email-display').textContent = email;
+    showAuthPanel('panel-register-code');
+    hideAuthError();
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('register-btn')?.addEventListener('click', async () => {
+  const email = document.getElementById('register-email').value.trim();
+  const code = document.getElementById('code-input').value.trim();
+  const username = document.getElementById('username-input').value.trim();
+  const password = document.getElementById('register-password').value;
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true;
+  try {
+    const data = await api('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, username, password, rememberMe: true }),
+    });
+    saveSession(data);
+    showForum();
+    connectSocket();
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('back-register-btn')?.addEventListener('click', () => {
+  showAuthPanel('panel-register-email');
+  hideAuthError();
+});
+
+async function boot() {
+  if (!token) {
+    showAuth();
+    return;
+  }
+  try {
+    const data = await api('/api/me');
+    user = data.user;
+    showForum();
+    connectSocket();
+  } catch {
+    token = null;
+    localStorage.removeItem(TOKEN_KEY);
+    showAuth();
+  }
+}
+
+boot();
