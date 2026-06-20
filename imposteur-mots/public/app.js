@@ -121,6 +121,33 @@ function canChefKick() {
   return getMe()?.isChef && ['waiting', 'results'].includes(room?.state);
 }
 
+function canChefTransfer() {
+  return getMe()?.isChef && ['waiting', 'results'].includes(room?.state);
+}
+
+function renderChefTransfer() {
+  if (!canChefTransfer()) return '';
+
+  const candidates = room.players.filter((p) => !p.isChef && p.connected);
+  if (candidates.length === 0) return '';
+
+  return `
+    <div class="card">
+      <h2>👨‍🍳 Passer le rôle de chef</h2>
+      <p class="rules" style="margin-bottom:12px">Tu peux désigner un nouveau chef pour la prochaine partie.</p>
+      <div class="transfer-grid">
+        ${candidates
+          .map(
+            (p) => `
+          <button class="btn btn-secondary transfer-btn" data-transfer-chef="${p.id}">
+            ${p.name}
+          </button>`
+          )
+          .join('')}
+      </div>
+    </div>`;
+}
+
 function renderPlayerRow(p, { showKick = false } = {}) {
   return `
     <li>
@@ -170,7 +197,8 @@ function renderLobby() {
           Lancer la partie
         </button>
         ${!room.canStart ? `<p class="rules" style="margin-top:10px;color:var(--warning)">Il faut encore ${room.minPlayers - count} personne(s).</p>` : ''}
-      </div>`
+      </div>
+      ${renderChefTransfer()}`
         : `
       <div class="card" style="text-align:center">
         <p class="rules">En attente du chef pour lancer la partie…</p>
@@ -348,6 +376,7 @@ function renderResults() {
         ${room.players.map((p) => renderPlayerRow(p, { showKick: canChefKick() })).join('')}
       </ul>
     </div>
+    ${renderChefTransfer()}
     ${
       getMe()?.isChef
         ? `<button class="btn btn-primary" id="btn-new-game">Nouvelle partie</button>`
@@ -425,6 +454,18 @@ function bindKickEvents() {
   });
 }
 
+function bindChefTransferEvents() {
+  document.querySelectorAll('[data-transfer-chef]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.transferChef;
+      const name = getPlayerName(targetId);
+      if (!confirm(`Passer le rôle de chef à ${name} ?`)) return;
+      const res = await emit('transfer_chef', { targetId });
+      if (res.error) alert(res.error);
+    });
+  });
+}
+
 function bindLobbyEvents() {
   document.getElementById('btn-copy')?.addEventListener('click', () => copyCode(room.code));
   document.getElementById('btn-start')?.addEventListener('click', async () => {
@@ -434,6 +475,7 @@ function bindLobbyEvents() {
     if (res.error) alert(res.error);
   });
   bindKickEvents();
+  bindChefTransferEvents();
 }
 
 function bindPlayingEvents() {
@@ -470,6 +512,7 @@ function bindResultsEvents() {
     if (res.error) alert(res.error);
   });
   bindKickEvents();
+  bindChefTransferEvents();
 }
 
 render();

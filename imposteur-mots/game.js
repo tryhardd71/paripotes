@@ -176,6 +176,22 @@ export function computeResults(room) {
   };
 }
 
+export function transferChef(room, newChefId) {
+  if (!['waiting', 'results'].includes(room.state)) return false;
+
+  const oldChef = room.players.find((p) => p.isChef);
+  const newChef = room.players.find((p) => p.id === newChefId);
+
+  if (!oldChef || !newChef || newChef.isChef) return false;
+  if (!newChef.connected) return false;
+
+  oldChef.isChef = false;
+  newChef.isChef = true;
+  room.chefId = newChef.id;
+
+  return true;
+}
+
 export function resetRoom(room) {
   room.state = 'waiting';
   room.wordMajority = '';

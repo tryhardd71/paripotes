@@ -269,6 +269,16 @@ input:focus {
   transform: none;
 }
 
+.transfer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.transfer-btn {
+  width: 100%;
+}
+
 .btn-row {
   display: flex;
   gap: 10px;

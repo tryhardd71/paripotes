@@ -16,6 +16,7 @@ import {
   allVotesIn,
   computeResults,
   resetRoom,
+  transferChef,
   sanitizeRoomForPlayer,
   setRoomResults,
   getPlayingPlayers,
@@ -191,6 +192,31 @@ io.on('connection', (socket) => {
     }
 
     resetRoom(room);
+    cb?.({ success: true });
+    broadcastRoom(room);
+  });
+
+  socket.on('transfer_chef', ({ targetId }, cb) => {
+    const code = playerRoom.get(socket.id);
+    const room = rooms.get(code);
+
+    if (!room || room.chefId !== socket.id) {
+      return cb?.({ error: 'Seul le chef peut transférer le rôle' });
+    }
+
+    if (!['waiting', 'results'].includes(room.state)) {
+      return cb?.({ error: 'Impossible pendant la partie' });
+    }
+
+    const target = room.players.find((p) => p.id === targetId);
+    if (!target || target.isChef) {
+      return cb?.({ error: 'Joueur invalide' });
+    }
+
+    if (!transferChef(room, targetId)) {
+      return cb?.({ error: 'Transfert impossible' });
+    }
+
     cb?.({ success: true });
     broadcastRoom(room);
   });
