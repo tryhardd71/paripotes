@@ -1,0 +1,6 @@
+node_modules/
+.env
+data.json
+email-config.json
+*.log
+.DS_Store
