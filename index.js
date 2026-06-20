@@ -307,11 +307,17 @@ app.post('/api/bets', authMiddleware, (req, res) => {
 
   const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
   if (!match) return res.status(404).json({ error: 'Match introuvable' });
+  if (match.status === 'live') {
+    return res.status(400).json({ error: 'Match en cours — paris fermés' });
+  }
+  if (match.status === 'finished') {
+    return res.status(400).json({ error: 'Match terminé — paris fermés' });
+  }
   if (match.status !== 'scheduled') {
     return res.status(400).json({ error: 'Les paris sont fermés pour ce match' });
   }
-  if (new Date(match.commence_time) < new Date()) {
-    return res.status(400).json({ error: 'Le match a déjà commencé' });
+  if (new Date(match.commence_time) <= new Date()) {
+    return res.status(400).json({ error: 'Le match a déjà commencé — paris fermés' });
   }
 
   const oddsRow = db.prepare('SELECT * FROM match_odds WHERE match_id = ? AND bookmaker = ?')

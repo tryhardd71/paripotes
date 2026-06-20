@@ -282,6 +282,19 @@ function initAuth() {
   card.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
+
+    if (btn.classList.contains('password-toggle')) {
+      e.preventDefault();
+      const input = document.getElementById(btn.dataset.target);
+      if (!input) return;
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('visible', show);
+      btn.textContent = show ? '🙈' : '👁';
+      btn.setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+      return;
+    }
+
     e.preventDefault();
 
     switch (btn.id) {
@@ -500,11 +513,18 @@ function renderMatches() {
   attachMatchListeners();
 }
 
+function canBetOnMatch(m) {
+  if (!m || m.status === 'live' || m.status === 'finished') return false;
+  if (m.status !== 'scheduled') return false;
+  return new Date(m.commence_time) > new Date();
+}
+
 function renderMatchCard(m) {
   const isLive = m.status === 'live';
   const isFinished = m.status === 'finished';
   const hasBet = m.myBets?.length > 0;
   const bet = m.myBets?.[0];
+  const bettingOpen = canBetOnMatch(m) && !hasBet;
 
   const score = isFinished || isLive
     ? `<span>${m.home_score ?? 0}</span> - <span>${m.away_score ?? 0}</span>`
@@ -524,10 +544,11 @@ function renderMatchCard(m) {
 
   const oddsButtons = bmOdds ? `
     <div class="odds-grid">
-      ${oddsBtn(m, 'home', bmOdds.home_odds, hasBet)}
-      ${bmOdds.draw_odds ? oddsBtn(m, 'draw', bmOdds.draw_odds, hasBet) : '<div></div>'}
-      ${oddsBtn(m, 'away', bmOdds.away_odds, hasBet)}
+      ${oddsBtn(m, 'home', bmOdds.home_odds, !bettingOpen)}
+      ${bmOdds.draw_odds ? oddsBtn(m, 'draw', bmOdds.draw_odds, !bettingOpen) : '<div></div>'}
+      ${oddsBtn(m, 'away', bmOdds.away_odds, !bettingOpen)}
     </div>
+    ${!bettingOpen && !hasBet ? `<p class="bets-closed-hint">${isLive ? 'Match en cours — paris fermés' : isFinished ? 'Match terminé' : 'Paris fermés'}</p>` : ''}
   ` : '<p style="color:var(--muted);font-size:.8rem">Cotes non disponibles</p>';
 
   const betInfo = hasBet ? `
@@ -594,6 +615,8 @@ function openBetSlip(matchId, outcome) {
   if (!activeLeague) return toast('Choisis d\'abord une ligue');
   const m = matches.find((x) => x.id === matchId);
   if (!m) return;
+  if (!canBetOnMatch(m)) return toast(m.status === 'live' ? 'Match en cours — paris fermés' : 'Paris fermés pour ce match');
+  if (m.myBets?.length) return toast('Tu as déjà un pari sur ce match');
 
   const bmKey = selectedBookmakers[m.id] || m.odds[0]?.bookmaker;
   const bmOdds = m.odds.find((o) => o.bookmaker === bmKey) || m.odds[0];

@@ -93,6 +93,31 @@ body {
   transition: border-color .2s;
 }
 .auth-step input:focus { border-color: var(--accent); }
+.password-field { position: relative; }
+.password-field input { padding-right: 48px; }
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 6px;
+  border-radius: 8px;
+}
+.password-toggle:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.password-toggle.visible { color: var(--accent); }
+.bets-closed-hint {
+  text-align: center;
+  font-size: .8rem;
+  color: var(--danger);
+  margin-top: 8px;
+  font-weight: 600;
+}
 #code-input { letter-spacing: 8px; text-align: center; font-size: 1.5rem; font-weight: 700; }
 
 .btn {
