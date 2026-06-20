@@ -238,6 +238,33 @@ body {
   font-weight: 600;
 }
 .header-right { display: flex; align-items: center; gap: 8px; }
+#refresh-btn { font-size: 1.1rem; padding: 6px 10px; min-width: 36px; }
+#refresh-btn.spinning { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.app-loading {
+  text-align: center;
+  padding: 10px 16px;
+  margin: 0 16px 8px;
+  background: rgba(34,197,94,.1);
+  border: 1px solid rgba(34,197,94,.3);
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: .85rem;
+  font-weight: 600;
+}
+.loading-state {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.load-error {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--muted);
+}
+.load-error button { margin-top: 12px; width: auto; }
 
 /* Tabs */
 .tabs {

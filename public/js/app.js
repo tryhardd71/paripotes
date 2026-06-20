@@ -37,6 +37,24 @@ function clearSession() {
   token = null;
   user = null;
   localStorage.removeItem('pp_token');
+  localStorage.removeItem('pp_active_league');
+}
+
+function normId(v) {
+  return Number(v);
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function setAppLoading(on) {
+  document.getElementById('app-loading')?.classList.toggle('hidden', !on);
+}
+
+function saveActiveLeague(id) {
+  if (id != null) localStorage.setItem('pp_active_league', String(id));
+  else localStorage.removeItem('pp_active_league');
 }
 
 
@@ -47,13 +65,29 @@ let selectedBookmakers = {};
 
 // ─── API helper ───────────────────────────────────────────────────────────────
 
-async function api(path, opts = {}) {
+async function api(path, opts = {}, retries = 3) {
   const headers = { 'Content-Type': 'application/json', ...opts.headers };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(API + path, { ...opts, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Erreur serveur');
-  return data;
+
+  let lastErr = new Error('Erreur serveur');
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const res = await fetch(API + path, { ...opts, headers, signal: ctrl.signal });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur serveur');
+      return data;
+    } catch (e) {
+      lastErr = e.name === 'AbortError'
+        ? new Error('Le serveur met du temps à démarrer (plan gratuit). Réessaie.')
+        : e;
+      if (attempt < retries - 1) await sleep(1500 * (attempt + 1));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
 }
 
 function toast(msg) {
@@ -78,13 +112,41 @@ function outcomeLabel(outcome, match) {
 const authScreen = document.getElementById('auth-screen');
 const mainScreen = document.getElementById('main-screen');
 
-function showMain() {
+async function showMain() {
   authScreen.classList.add('hidden');
   mainScreen.classList.remove('hidden');
   document.getElementById('user-badge').textContent = user.username;
-  loadLeagues().then(() => {
-    if (leagues.length) selectLeague(leagues[0].id);
-  });
+  await refreshAppData();
+}
+
+async function refreshAppData() {
+  const refreshBtn = document.getElementById('refresh-btn');
+  refreshBtn?.classList.add('spinning');
+  setAppLoading(true);
+  try {
+    await loadLeagues();
+    const savedId = normId(localStorage.getItem('pp_active_league'));
+    const target = leagues.find((l) => normId(l.id) === savedId) || leagues[0];
+    if (target) {
+      await selectLeague(target.id, false);
+    } else {
+      activeLeague = null;
+      saveActiveLeague(null);
+      updateLeagueBar();
+      matches = [];
+      renderMatches();
+    }
+    const betsTab = document.querySelector('.tab[data-tab="bets"]');
+    if (betsTab?.classList.contains('active')) await loadBets();
+    const lbTab = document.querySelector('.tab[data-tab="leaderboard"]');
+    if (lbTab?.classList.contains('active')) await loadLeaderboard();
+  } catch (e) {
+    toast(e.message);
+    renderLeaguesError(e.message);
+  } finally {
+    setAppLoading(false);
+    refreshBtn?.classList.remove('spinning');
+  }
 }
 
 function showAuthPanel(id) {
@@ -138,7 +200,7 @@ async function handleLogin() {
       body: JSON.stringify({ email, password, rememberMe }),
     });
     saveSession(data);
-    showMain();
+    await showMain();
   } catch (e) {
     showAuthError(e.message);
   } finally {
@@ -221,7 +283,7 @@ async function handleRegister() {
       body: JSON.stringify({ email, code, username, password, rememberMe }),
     });
     saveSession(data);
-    showMain();
+    await showMain();
   } catch (e) {
     showAuthError(e.message);
   } finally {
@@ -268,7 +330,7 @@ async function handleForgotReset() {
       body: JSON.stringify({ email, code, password, rememberMe: true }),
     });
     saveSession(data);
-    showMain();
+    await showMain();
     toast('Mot de passe mis à jour !');
   } catch (e) {
     showAuthError(e.message);
@@ -354,7 +416,7 @@ async function resumeSession() {
   try {
     const data = await api('/api/me');
     user = data.user;
-    showMain();
+    await showMain();
   } catch {
     clearSession();
     switchAuthTab('login');
@@ -362,6 +424,8 @@ async function resumeSession() {
 }
 
 function initApp() {
+  document.getElementById('refresh-btn')?.addEventListener('click', () => refreshAppData());
+
   document.getElementById('logout-btn').addEventListener('click', async () => {
     try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     clearSession();
@@ -378,9 +442,10 @@ document.querySelectorAll('.tab').forEach((tab) => {
     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
-    if (tab.dataset.tab === 'matches') loadMatches();
-    if (tab.dataset.tab === 'bets') loadBets();
-    if (tab.dataset.tab === 'leaderboard') loadLeaderboard();
+    if (tab.dataset.tab === 'leagues') loadLeagues().catch((e) => toast(e.message));
+    if (tab.dataset.tab === 'matches') loadMatches().catch((e) => toast(e.message));
+    if (tab.dataset.tab === 'bets') loadBets().catch((e) => toast(e.message));
+    if (tab.dataset.tab === 'leaderboard') loadLeaderboard().catch((e) => toast(e.message));
   };
 });
 
@@ -437,9 +502,24 @@ document.getElementById('join-league-btn').onclick = async () => {
 };
 
 async function loadLeagues() {
+  const list = document.getElementById('leagues-list');
+  if (list) list.innerHTML = '<div class="loading-state">Chargement des ligues…</div>';
   const data = await api('/api/leagues');
-  leagues = data.leagues;
+  leagues = data.leagues || [];
   renderLeagues();
+}
+
+function renderLeaguesError(msg) {
+  const list = document.getElementById('leagues-list');
+  if (!list) return;
+  list.innerHTML = `
+    <div class="load-error">
+      <p>Impossible de charger tes ligues.</p>
+      <p style="font-size:.8rem;margin-top:6px">${esc(msg)}</p>
+      <button type="button" class="btn btn-secondary btn-sm" id="retry-leagues-btn">Réessayer</button>
+    </div>
+  `;
+  document.getElementById('retry-leagues-btn')?.addEventListener('click', () => refreshAppData());
 }
 
 function renderLeagues() {
@@ -449,7 +529,7 @@ function renderLeagues() {
     return;
   }
   list.innerHTML = leagues.map((l) => `
-    <div class="league-card ${activeLeague?.id === l.id ? 'selected' : ''}" data-id="${l.id}">
+    <div class="league-card ${normId(activeLeague?.id) === normId(l.id) ? 'selected' : ''}" data-id="${l.id}">
       <div class="league-card-top">
         <h3>${esc(l.name)}</h3>
         <button type="button" class="league-leave-btn" data-leave="${l.id}" title="Quitter la ligue">Quitter</button>
@@ -478,8 +558,9 @@ async function leaveLeague(id, e) {
   try {
     await api(`/api/leagues/${id}/leave`, { method: 'POST' });
     toast('Tu as quitté la ligue');
-    if (activeLeague?.id === id) {
+    if (normId(activeLeague?.id) === normId(id)) {
       activeLeague = null;
+      saveActiveLeague(null);
       matches = [];
       updateLeagueBar();
       renderMatches();
@@ -491,12 +572,17 @@ async function leaveLeague(id, e) {
   }
 }
 
-async function selectLeague(id) {
-  activeLeague = leagues.find((l) => l.id === id);
+async function selectLeague(id, save = true) {
+  activeLeague = leagues.find((l) => normId(l.id) === normId(id));
   if (!activeLeague) return;
+  if (save) saveActiveLeague(activeLeague.id);
   renderLeagues();
   updateLeagueBar();
-  await loadMatches();
+  try {
+    await loadMatches();
+  } catch (e) {
+    toast(e.message);
+  }
 }
 
 function updateLeagueBar() {
@@ -513,13 +599,16 @@ function updateLeagueBar() {
 // ─── Matches ──────────────────────────────────────────────────────────────────
 
 async function loadMatches() {
+  const list = document.getElementById('matches-list');
+  if (list) list.innerHTML = '<div class="loading-state">Chargement des matchs…</div>';
+
   const params = new URLSearchParams();
   if (activeLeague) params.set('leagueId', activeLeague.id);
   if (matchFilter === 'upcoming') params.set('upcoming', 'true');
   else if (matchFilter === 'finished') params.set('status', 'finished');
 
   const data = await api(`/api/matches?${params}`);
-  matches = data.matches;
+  matches = data.matches || [];
   renderMatches();
 }
 
@@ -800,14 +889,15 @@ async function cancelBet(betId, askConfirm = true) {
 // ─── Bets history ─────────────────────────────────────────────────────────────
 
 async function loadBets() {
+  const list = document.getElementById('bets-list');
   if (!activeLeague) {
-    document.getElementById('bets-list').innerHTML = `<div class="empty-state"><div class="emoji">🎰</div><p>Sélectionne une ligue pour voir tes paris</p></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="emoji">🎰</div><p>Sélectionne une ligue pour voir tes paris</p></div>`;
     return;
   }
+  list.innerHTML = '<div class="loading-state">Chargement des paris…</div>';
   const data = await api(`/api/bets?leagueId=${activeLeague.id}`);
-  const list = document.getElementById('bets-list');
 
-  if (!data.bets.length) {
+  if (!data.bets?.length) {
     list.innerHTML = `<div class="empty-state"><div class="emoji">🎰</div><p>Aucun pari pour l'instant — vas-y !</p></div>`;
     return;
   }

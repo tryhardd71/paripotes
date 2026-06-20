@@ -102,6 +102,7 @@
           <span class="logo-small">⚽ PariPotes</span>
         </div>
         <div class="header-right">
+          <button type="button" id="refresh-btn" class="btn btn-ghost btn-sm" title="Actualiser">↻</button>
           <span id="user-badge" class="user-badge"></span>
           <button type="button" id="logout-btn" class="btn btn-ghost btn-sm">Déco</button>
         </div>
@@ -113,6 +114,8 @@
         <button class="tab" data-tab="bets">Mes paris</button>
         <button class="tab" data-tab="leaderboard">Classement</button>
       </nav>
+
+      <div id="app-loading" class="app-loading hidden">Chargement en cours…</div>
 
       <main class="content">
         <!-- Ligues -->
