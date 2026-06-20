@@ -29,3 +29,15 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+
+  - type: web
+    name: imposteur-mots
+    runtime: node
+    plan: free
+    rootDir: imposteur-mots
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
