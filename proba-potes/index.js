@@ -10,7 +10,10 @@ import {
   acceptProba,
   submitPick,
   sanitizeRoomForPlayer,
+  ensurePlayer,
+  playerKey,
 } from './game.js';
+import { loadRooms, saveRooms } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3003;
@@ -23,19 +26,52 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*' } });
 
-const rooms = new Map();
-const playerRoom = new Map();
+const rooms = loadRooms();
+const socketSession = new Map();
 
-function broadcastRoom(room) {
-  room.players.forEach((player) => {
-    if (player.connected) {
-      io.to(player.id).emit('room_update', sanitizeRoomForPlayer(room, player.id));
-    }
-  });
+function persist() {
+  saveRooms(rooms);
 }
 
 function getRoomByCode(code) {
   return rooms.get(code?.toUpperCase());
+}
+
+function setPlayerConnected(room, key, connected) {
+  const player = room.players.find((p) => p.key === key);
+  if (player) player.connected = connected;
+}
+
+function broadcastRoom(room) {
+  room.players.forEach((player) => {
+    if (!player.connected) return;
+    for (const [sid, session] of socketSession.entries()) {
+      if (session.code === room.code && session.playerKey === player.key) {
+        io.to(sid).emit('room_update', sanitizeRoomForPlayer(room, player.key));
+      }
+    }
+  });
+}
+
+function sendToPlayer(room, playerKey) {
+  const player = room.players.find((p) => p.key === playerKey);
+  if (!player?.connected) return;
+  for (const [sid, session] of socketSession.entries()) {
+    if (session.code === room.code && session.playerKey === playerKey) {
+      io.to(sid).emit('room_update', sanitizeRoomForPlayer(room, playerKey));
+    }
+  }
+}
+
+function attachSession(socket, room, name) {
+  const key = playerKey(name);
+  ensurePlayer(room, name);
+  setPlayerConnected(room, key, true);
+
+  socketSession.set(socket.id, { code: room.code, playerKey: key, name: name.trim() });
+  socket.join(room.code);
+
+  return key;
 }
 
 io.on('connection', (socket) => {
@@ -43,13 +79,16 @@ io.on('connection', (socket) => {
     const name = playerName?.trim();
     if (!name) return cb?.({ error: 'Nom requis' });
 
-    const room = createRoom(socket.id, name, rooms.keys());
-    rooms.set(room.code, room);
-    playerRoom.set(socket.id, room.code);
-    socket.join(room.code);
+    const key = playerKey(name);
+    const room = createRoom(key, name, rooms.keys());
+    room.players[0].connected = true;
 
-    cb?.({ success: true, code: room.code });
-    broadcastRoom(room);
+    rooms.set(room.code, room);
+    attachSession(socket, room, name);
+    persist();
+
+    cb?.({ success: true, code: room.code, playerKey: key });
+    sendToPlayer(room, key);
   });
 
   socket.on('join_room', ({ code, playerName }, cb) => {
@@ -57,112 +96,69 @@ io.on('connection', (socket) => {
     const room = getRoomByCode(code);
 
     if (!name) return cb?.({ error: 'Nom requis' });
-    if (!room) return cb?.({ error: 'Salon introuvable' });
+    if (!room) return cb?.({ error: 'Forum introuvable' });
 
-    const existing = room.players.find(
-      (p) => p.name.toLowerCase() === name.toLowerCase() && p.connected
-    );
-    if (existing) return cb?.({ error: 'Ce pseudo est déjà pris' });
+    const key = attachSession(socket, room, name);
+    persist();
 
-    const disconnected = room.players.find(
-      (p) => p.name.toLowerCase() === name.toLowerCase() && !p.connected
-    );
-
-    if (disconnected) {
-      const oldId = disconnected.id;
-      disconnected.id = socket.id;
-      disconnected.connected = true;
-
-      room.probas.forEach((proba) => {
-        if (proba.creatorId === oldId) proba.creatorId = socket.id;
-        if (proba.accepterId === oldId) proba.accepterId = socket.id;
-        if (proba.roundHolderId === oldId) proba.roundHolderId = socket.id;
-        if (proba.picks[oldId] != null) {
-          proba.picks[socket.id] = proba.picks[oldId];
-          delete proba.picks[oldId];
-        }
-      });
-    } else {
-      room.players.push({
-        id: socket.id,
-        name,
-        connected: true,
-      });
-    }
-
-    playerRoom.set(socket.id, room.code);
-    socket.join(room.code);
-
-    cb?.({ success: true, code: room.code });
+    cb?.({ success: true, code: room.code, playerKey: key });
     broadcastRoom(room);
   });
 
   socket.on('create_proba', ({ description, cote, reverse }, cb) => {
-    const code = playerRoom.get(socket.id);
-    const room = rooms.get(code);
-    if (!room) return cb?.({ error: 'Pas de salon' });
+    const session = socketSession.get(socket.id);
+    const room = session ? rooms.get(session.code) : null;
+    if (!room || !session) return cb?.({ error: 'Pas connecté au forum' });
 
-    const result = createProba(room, socket.id, { description, cote, reverse });
+    const result = createProba(room, session.playerKey, { description, cote, reverse });
     if (result.error) return cb?.({ error: result.error });
 
+    persist();
     cb?.({ success: true });
     broadcastRoom(room);
   });
 
   socket.on('accept_proba', ({ probaId }, cb) => {
-    const code = playerRoom.get(socket.id);
-    const room = rooms.get(code);
-    if (!room) return cb?.({ error: 'Pas de salon' });
+    const session = socketSession.get(socket.id);
+    const room = session ? rooms.get(session.code) : null;
+    if (!room || !session) return cb?.({ error: 'Pas connecté au forum' });
 
-    const result = acceptProba(room, probaId, socket.id);
+    const result = acceptProba(room, probaId, session.playerKey);
     if (result.error) return cb?.({ error: result.error });
 
+    persist();
     cb?.({ success: true });
     broadcastRoom(room);
   });
 
   socket.on('submit_pick', ({ probaId, number }, cb) => {
-    const code = playerRoom.get(socket.id);
-    const room = rooms.get(code);
-    if (!room) return cb?.({ error: 'Pas de salon' });
+    const session = socketSession.get(socket.id);
+    const room = session ? rooms.get(session.code) : null;
+    if (!room || !session) return cb?.({ error: 'Pas connecté au forum' });
 
-    const result = submitPick(room, probaId, socket.id, number);
+    const result = submitPick(room, probaId, session.playerKey, number);
     if (result.error) return cb?.({ error: result.error });
 
+    persist();
     cb?.({ success: true, resolved: result.resolved });
     broadcastRoom(room);
   });
 
   socket.on('disconnect', () => {
-    const code = playerRoom.get(socket.id);
-    playerRoom.delete(socket.id);
-    if (!code) return;
+    const session = socketSession.get(socket.id);
+    socketSession.delete(socket.id);
+    if (!session) return;
 
-    const room = rooms.get(code);
+    const room = rooms.get(session.code);
     if (!room) return;
 
-    const player = room.players.find((p) => p.id === socket.id);
-    if (player) {
-      player.connected = false;
-      const offlineId = `offline-${player.name}`;
-      room.probas.forEach((proba) => {
-        if (proba.creatorId === socket.id) proba.creatorId = offlineId;
-        if (proba.accepterId === socket.id) proba.accepterId = offlineId;
-        if (proba.roundHolderId === socket.id) proba.roundHolderId = offlineId;
-        if (proba.picks[socket.id] != null) {
-          proba.picks[offlineId] = proba.picks[socket.id];
-          delete proba.picks[socket.id];
-        }
-      });
-      player.id = offlineId;
-    }
-
-    const anyoneConnected = room.players.some((p) => p.connected);
-    if (!anyoneConnected) rooms.delete(code);
-    else broadcastRoom(room);
+    setPlayerConnected(room, session.playerKey, false);
+    persist();
+    broadcastRoom(room);
   });
 });
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Proba Potes — port ${PORT}`);
+  console.log(`Forums chargés : ${rooms.size}`);
 });
