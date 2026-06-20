@@ -349,7 +349,7 @@ function initAuth() {
 }
 
 async function resumeSession() {
-  fetch('/api/status').catch(() => {});
+  fetch('/api/health').catch(() => {});
   if (!token) return;
   try {
     const data = await api('/api/me');
@@ -357,6 +357,7 @@ async function resumeSession() {
     showMain();
   } catch {
     clearSession();
+    switchAuthTab('login');
   }
 }
 

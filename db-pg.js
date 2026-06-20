@@ -59,6 +59,8 @@ export async function createPgBackend() {
   const pool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15000,
+    max: 10,
   });
   pool.on('error', (err) => console.error('PG pool error:', err.message));
 

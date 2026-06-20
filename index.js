@@ -393,6 +393,10 @@ app.post('/api/sync', authMiddleware, async (_req, res) => {
   }
 });
 
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, database: getDbType() });
+});
+
 app.get('/api/status', async (_req, res) => {
   const matchCount = (await db.prepare('SELECT COUNT(*) as c FROM matches').get()).c;
   const oddsCount = (await db.prepare('SELECT COUNT(*) as c FROM match_odds').get()).c;
@@ -418,24 +422,17 @@ app.use((err, _req, res, _next) => {
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 
+async function runSync(label = 'Sync') {
+  try {
+    const result = await syncAll();
+    console.log(`✅ ${label}:`, JSON.stringify(result));
+  } catch (err) {
+    console.warn(`⚠️ ${label} échouée:`, err.message);
+  }
+}
+
 async function bootstrap() {
   await initDb();
-
-  try {
-    console.log('🔄 Synchronisation initiale des matchs et cotes...');
-    const result = await syncAll();
-    console.log('✅ Sync OK:', JSON.stringify(result));
-  } catch (err) {
-    console.warn('⚠️ Sync initiale échouée:', err.message);
-  }
-
-  setInterval(async () => {
-    try {
-      await syncAll();
-    } catch (err) {
-      console.warn('Sync périodique échouée:', err.message);
-    }
-  }, 5 * 60 * 1000);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🏆 PariPotes — port ${PORT} (${getDbType()})\n`);
@@ -447,6 +444,10 @@ async function bootstrap() {
     }
     console.log('📧 Envoi de codes par email : automatique\n');
   });
+
+  // Ne pas bloquer le démarrage — Render health check timeout sinon
+  runSync('Sync initiale');
+  setInterval(() => runSync('Sync périodique'), 5 * 60 * 1000);
 }
 
 bootstrap().catch((err) => {
