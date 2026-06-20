@@ -106,7 +106,7 @@ function renderHome() {
     <div class="card">
       <h2>Règles</h2>
       <ul class="rules">
-        <li>Minimum <strong>4 personnes</strong> (chef inclus), pas de maximum</li>
+        <li>Minimum <strong>3 personnes</strong> (chef inclus), pas de maximum</li>
         <li>Le chef donne un mot à tous sauf un (l'imposteur)</li>
         <li>Vocal & caméra intégrés dans le salon</li>
         <li>Chacun dit son mot à voix haute (15 sec / tour)</li>

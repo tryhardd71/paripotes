@@ -1,4 +1,4 @@
-const MIN_TOTAL_PLAYERS = 4;
+const MIN_TOTAL_PLAYERS = 3;
 const MIN_ROUNDS = 2;
 const TURN_DURATION_MS = 15000;
 

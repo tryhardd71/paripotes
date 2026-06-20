@@ -19,6 +19,7 @@ import {
   sanitizeRoomForPlayer,
   setRoomResults,
   getPlayingPlayers,
+  MIN_TOTAL_PLAYERS,
 } from './game.js';
 
 const PORT = process.env.PORT || 3001;
@@ -111,8 +112,8 @@ io.on('connection', (socket) => {
       return cb?.({ error: 'Les deux mots sont requis' });
     }
 
-    if (room.players.filter((p) => p.connected).length < 4) {
-      return cb?.({ error: 'Il faut au moins 4 personnes (chef inclus)' });
+    if (room.players.filter((p) => p.connected).length < MIN_TOTAL_PLAYERS) {
+      return cb?.({ error: `Il faut au moins ${MIN_TOTAL_PLAYERS} personnes (chef inclus)` });
     }
 
     assignWords(room, wordMajority, wordImpostor);
