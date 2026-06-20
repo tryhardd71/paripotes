@@ -547,12 +547,18 @@ function canBetOnMatch(m) {
   return new Date(m.commence_time) > new Date();
 }
 
+function canEditBet(m, bet) {
+  return bet?.status === 'pending' && canBetOnMatch(m);
+}
+
 function renderMatchCard(m) {
   const isLive = m.status === 'live';
   const isFinished = m.status === 'finished';
   const hasBet = m.myBets?.length > 0;
   const bet = m.myBets?.[0];
+  const editable = hasBet && canEditBet(m, bet);
   const bettingOpen = canBetOnMatch(m) && !hasBet;
+  const oddsDisabled = !canBetOnMatch(m) || (hasBet && !editable);
 
   const score = isFinished || isLive
     ? `<span>${m.home_score ?? 0}</span> - <span>${m.away_score ?? 0}</span>`
@@ -572,16 +578,22 @@ function renderMatchCard(m) {
 
   const oddsButtons = bmOdds ? `
     <div class="odds-grid">
-      ${oddsBtn(m, 'home', bmOdds.home_odds, !bettingOpen)}
-      ${bmOdds.draw_odds ? oddsBtn(m, 'draw', bmOdds.draw_odds, !bettingOpen) : '<div></div>'}
-      ${oddsBtn(m, 'away', bmOdds.away_odds, !bettingOpen)}
+      ${oddsBtn(m, 'home', bmOdds.home_odds, oddsDisabled)}
+      ${bmOdds.draw_odds ? oddsBtn(m, 'draw', bmOdds.draw_odds, oddsDisabled) : '<div></div>'}
+      ${oddsBtn(m, 'away', bmOdds.away_odds, oddsDisabled)}
     </div>
     ${!bettingOpen && !hasBet ? `<p class="bets-closed-hint">${isLive ? 'Match en cours — paris fermés' : isFinished ? 'Match terminé' : 'Paris fermés'}</p>` : ''}
   ` : '<p style="color:var(--muted);font-size:.8rem">Cotes non disponibles</p>';
 
   const betInfo = hasBet ? `
     <div class="bet-placed">
-      Pari : ${outcomeLabel(bet.outcome, m)} @ ${bet.odds} — Mise ${bet.stake} pts (${bet.status})
+      <div>Pari : ${outcomeLabel(bet.outcome, m)} @ ${bet.odds} — Mise ${bet.stake} pts (${bet.status})</div>
+      ${editable ? `
+        <div class="bet-actions">
+          <button type="button" class="bet-action-btn" data-edit-bet="${bet.id}" data-match="${m.id}">Modifier</button>
+          <button type="button" class="bet-action-btn danger" data-cancel-bet="${bet.id}">Annuler</button>
+        </div>
+      ` : ''}
     </div>
   ` : '';
 
@@ -631,7 +643,28 @@ function attachMatchListeners() {
   });
 
   document.querySelectorAll('.odds-btn:not(:disabled)').forEach((btn) => {
-    btn.onclick = () => openBetSlip(parseInt(btn.dataset.match, 10), btn.dataset.outcome);
+    btn.onclick = () => {
+      const matchId = parseInt(btn.dataset.match, 10);
+      const m = matches.find((x) => x.id === matchId);
+      const existing = m?.myBets?.[0];
+      if (existing && canEditBet(m, existing)) {
+        openBetSlip(matchId, btn.dataset.outcome, { editBet: existing });
+      } else {
+        openBetSlip(matchId, btn.dataset.outcome);
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-edit-bet]').forEach((btn) => {
+    btn.onclick = () => {
+      const m = matches.find((x) => x.id === parseInt(btn.dataset.match, 10));
+      const bet = m?.myBets?.find((b) => b.id === parseInt(btn.dataset.editBet, 10));
+      if (m && bet) openBetSlip(m.id, bet.outcome, { editBet: bet });
+    };
+  });
+
+  document.querySelectorAll('[data-cancel-bet]').forEach((btn) => {
+    btn.onclick = () => cancelBet(parseInt(btn.dataset.cancelBet, 10));
   });
 }
 
@@ -639,35 +672,43 @@ function attachMatchListeners() {
 
 let pendingBet = null;
 
-function openBetSlip(matchId, outcome) {
+function openBetSlip(matchId, outcome, { editBet = null } = {}) {
   if (!activeLeague) return toast('Choisis d\'abord une ligue');
   const m = matches.find((x) => x.id === matchId);
   if (!m) return;
   if (!canBetOnMatch(m)) return toast(m.status === 'live' ? 'Match en cours — paris fermés' : 'Paris fermés pour ce match');
-  if (m.myBets?.length) return toast('Tu as déjà un pari sur ce match');
+  if (!editBet && m.myBets?.length) return toast('Tu as déjà un pari sur ce match');
 
+  if (editBet) selectedBookmakers[m.id] = editBet.bookmaker;
   const bmKey = selectedBookmakers[m.id] || m.odds[0]?.bookmaker;
   const bmOdds = m.odds.find((o) => o.bookmaker === bmKey) || m.odds[0];
   if (!bmOdds) return toast('Pas de cotes disponibles');
 
   const odds = outcome === 'home' ? bmOdds.home_odds : outcome === 'away' ? bmOdds.away_odds : bmOdds.draw_odds;
-  pendingBet = { matchId, outcome, odds, bookmaker: bmOdds.bookmaker, match: m };
+  if (!odds) return toast('Pas de cote pour ce résultat');
+
+  const defaultStake = editBet?.stake || 25;
+  pendingBet = {
+    matchId, outcome, odds, bookmaker: bmOdds.bookmaker, match: m,
+    editBetId: editBet?.id || null,
+  };
 
   const slip = document.getElementById('bet-slip');
   document.getElementById('bet-slip-body').innerHTML = `
     <p style="font-weight:700;margin-bottom:4px">${esc(m.home_team)} vs ${esc(m.away_team)}</p>
-    <p style="color:var(--muted);font-size:.85rem">${outcomeLabel(outcome, m)} @ <strong style="color:var(--accent)">${odds.toFixed(2)}</strong> (${esc(bmOdds.bookmaker)})</p>
+    <p style="color:var(--muted);font-size:.85rem">${editBet ? 'Modifier — ' : ''}${outcomeLabel(outcome, m)} @ <strong style="color:var(--accent)">${odds.toFixed(2)}</strong> (${esc(bmOdds.bookmaker)})</p>
     <p style="color:var(--muted);font-size:.8rem;margin-top:8px">Solde : ${activeLeague.points} pts</p>
     <div class="stake-presets">
       ${[10, 25, 50, 100].map((v) => `<button class="stake-preset" data-stake="${v}">${v}</button>`).join('')}
     </div>
     <div class="stake-input">
       <span>Mise</span>
-      <input type="number" id="stake-input" value="25" min="1" max="500">
+      <input type="number" id="stake-input" value="${defaultStake}" min="1" max="500">
       <span>pts</span>
     </div>
-    <div class="potential-win">Gain potentiel : <span id="potential-win">${(25 * odds).toFixed(0)}</span> pts</div>
-    <button class="btn btn-primary" id="confirm-bet">Valider le pari</button>
+    <div class="potential-win">Gain potentiel : <span id="potential-win">${(defaultStake * odds).toFixed(0)}</span> pts</div>
+    <button class="btn btn-primary" id="confirm-bet">${editBet ? 'Enregistrer' : 'Valider le pari'}</button>
+    ${editBet ? '<button type="button" class="btn btn-ghost" id="cancel-edit-bet">Annuler le pari</button>' : ''}
   `;
 
   slip.classList.remove('hidden');
@@ -684,6 +725,14 @@ function openBetSlip(matchId, outcome) {
   });
 
   document.getElementById('confirm-bet').onclick = placeBet;
+  const cancelEditBtn = document.getElementById('cancel-edit-bet');
+  if (cancelEditBtn) {
+    cancelEditBtn.onclick = async () => {
+      document.getElementById('bet-slip').classList.add('hidden');
+      pendingBet = null;
+      await cancelBet(editBet.id, false);
+    };
+  }
 }
 
 document.getElementById('close-bet-slip').onclick = () => {
@@ -696,23 +745,53 @@ async function placeBet() {
   const stake = parseFloat(document.getElementById('stake-input').value);
   if (!stake || stake < 1) return toast('Mise invalide');
 
+  const payload = {
+    outcome: pendingBet.outcome,
+    stake,
+    bookmaker: pendingBet.bookmaker,
+  };
+
   try {
-    const data = await api('/api/bets', {
-      method: 'POST',
-      body: JSON.stringify({
-        leagueId: activeLeague.id,
-        matchId: pendingBet.matchId,
-        outcome: pendingBet.outcome,
-        stake,
-        bookmaker: pendingBet.bookmaker,
-      }),
-    });
+    const data = pendingBet.editBetId
+      ? await api(`/api/bets/${pendingBet.editBetId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      : await api('/api/bets', {
+        method: 'POST',
+        body: JSON.stringify({
+          leagueId: activeLeague.id,
+          matchId: pendingBet.matchId,
+          ...payload,
+        }),
+      });
+    const isEdit = !!pendingBet.editBetId;
     activeLeague.points = data.points;
     updateLeagueBar();
     document.getElementById('bet-slip').classList.add('hidden');
     pendingBet = null;
-    toast(`Pari placé ! Gain potentiel : ${data.bet.potentialWin} pts`);
+    toast(isEdit
+      ? `Pari mis à jour ! Gain potentiel : ${data.bet.potentialWin} pts`
+      : `Pari placé ! Gain potentiel : ${data.bet.potentialWin} pts`);
     await loadMatches();
+    const betsTab = document.querySelector('.tab[data-tab="bets"]');
+    if (betsTab?.classList.contains('active')) await loadBets();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+async function cancelBet(betId, askConfirm = true) {
+  if (askConfirm && !confirm('Annuler ce pari ? La mise sera remboursée.')) return;
+  try {
+    const data = await api(`/api/bets/${betId}`, { method: 'DELETE' });
+    if (activeLeague) {
+      activeLeague.points = data.points;
+      updateLeagueBar();
+    }
+    document.getElementById('bet-slip')?.classList.add('hidden');
+    pendingBet = null;
+    toast('Pari annulé — points remboursés');
+    await loadMatches();
+    const betsTab = document.querySelector('.tab[data-tab="bets"]');
+    if (betsTab?.classList.contains('active')) await loadBets();
   } catch (e) {
     toast(e.message);
   }
@@ -740,6 +819,10 @@ async function loadBets() {
       ? `+${b.payout} pts`
       : b.status === 'lost' ? `-${b.stake} pts` : statusLabels[b.status];
 
+    const editable = b.status === 'pending'
+      && b.match_status === 'scheduled'
+      && new Date(b.commence_time) > new Date();
+
     return `
       <div class="bet-card ${resultClass}">
         <div class="bet-match">${esc(b.home_team)} vs ${esc(b.away_team)}</div>
@@ -749,9 +832,28 @@ async function loadBets() {
           ${b.match_status === 'finished' ? ` — Score : ${b.home_score}-${b.away_score}` : ''}
         </div>
         <div class="bet-result ${resultClass}">${resultText}</div>
+        ${editable ? `
+          <div class="bet-actions">
+            <button type="button" class="bet-action-btn" data-bets-edit="${b.id}" data-bets-match="${b.match_id}" data-bets-outcome="${b.outcome}">Modifier</button>
+            <button type="button" class="bet-action-btn danger" data-bets-cancel="${b.id}">Annuler</button>
+          </div>
+        ` : ''}
       </div>
     `;
   }).join('');
+
+  list.querySelectorAll('[data-bets-edit]').forEach((btn) => {
+    btn.onclick = async () => {
+      document.querySelector('.tab[data-tab="matches"]')?.click();
+      await loadMatches();
+      const m = matches.find((x) => x.id === parseInt(btn.dataset.betsMatch, 10));
+      const bet = m?.myBets?.find((x) => x.id === parseInt(btn.dataset.betsEdit, 10));
+      if (m && bet) openBetSlip(m.id, btn.dataset.betsOutcome, { editBet: bet });
+    };
+  });
+  list.querySelectorAll('[data-bets-cancel]').forEach((btn) => {
+    btn.onclick = () => cancelBet(parseInt(btn.dataset.betsCancel, 10));
+  });
 }
 
 // ─── Leaderboard ──────────────────────────────────────────────────────────────

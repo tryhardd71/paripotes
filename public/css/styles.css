@@ -497,6 +497,35 @@ body {
   color: var(--accent);
   text-align: center;
 }
+.bet-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.bet-action-btn {
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.bet-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.bet-action-btn.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(239, 68, 68, .08);
+}
+.bet-card .bet-actions { margin-top: 12px; }
 
 /* Leaderboard */
 .leaderboard { display: flex; flex-direction: column; gap: 8px; }

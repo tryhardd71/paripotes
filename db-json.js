@@ -204,6 +204,24 @@ function execute(sql, params, mode) {
     return {};
   }
 
+  if (s.startsWith('UPDATE bets SET outcome')) {
+    const b = data.bets.find((r) => r.id === params[4]);
+    if (b) {
+      b.outcome = params[0];
+      b.stake = params[1];
+      b.odds = params[2];
+      b.bookmaker = params[3];
+    }
+    save(data);
+    return {};
+  }
+
+  if (s.startsWith('DELETE FROM bets WHERE id')) {
+    data.bets = data.bets.filter((r) => r.id !== params[0]);
+    save(data);
+    return {};
+  }
+
   // SELECT queries
   if (s.includes('SELECT u.* FROM sessions s')) {
     return data.sessions
@@ -328,6 +346,10 @@ function execute(sql, params, mode) {
 
   if (s.includes('SELECT * FROM match_odds WHERE match_id = ? ORDER BY')) {
     return data.match_odds.filter((r) => r.match_id === params[0]).sort((a, b) => a.bookmaker.localeCompare(b.bookmaker));
+  }
+
+  if (s.includes('SELECT * FROM bets WHERE id = ? AND user_id = ?')) {
+    return data.bets.filter((r) => r.id === params[0] && r.user_id === params[1]);
   }
 
   if (s.includes('SELECT * FROM bets WHERE user_id = ? AND league_id = ? AND match_id = ? AND status')) {

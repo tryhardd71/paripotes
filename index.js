@@ -327,6 +327,21 @@ app.get('/api/matches', authMiddleware, async (req, res) => {
 
 // ─── Bets ───────────────────────────────────────────────────────────────────
 
+function assertMatchOpenForBets(match) {
+  if (!match) return 'Match introuvable';
+  if (match.status === 'live') return 'Match en cours — paris fermés';
+  if (match.status === 'finished') return 'Match terminé — paris fermés';
+  if (match.status !== 'scheduled') return 'Les paris sont fermés pour ce match';
+  if (new Date(match.commence_time) <= new Date()) return 'Le match a déjà commencé — paris fermés';
+  return null;
+}
+
+function resolveOddsValue(oddsRow, outcome) {
+  if (outcome === 'home') return oddsRow.home_odds;
+  if (outcome === 'away') return oddsRow.away_odds;
+  return oddsRow.draw_odds;
+}
+
 app.post('/api/bets', authMiddleware, async (req, res) => {
   const { leagueId, matchId, outcome, stake, bookmaker } = req.body;
 
@@ -346,27 +361,14 @@ app.post('/api/bets', authMiddleware, async (req, res) => {
   if (member.points < stake) return res.status(400).json({ error: 'Points insuffisants' });
 
   const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
-  if (!match) return res.status(404).json({ error: 'Match introuvable' });
-  if (match.status === 'live') {
-    return res.status(400).json({ error: 'Match en cours — paris fermés' });
-  }
-  if (match.status === 'finished') {
-    return res.status(400).json({ error: 'Match terminé — paris fermés' });
-  }
-  if (match.status !== 'scheduled') {
-    return res.status(400).json({ error: 'Les paris sont fermés pour ce match' });
-  }
-  if (new Date(match.commence_time) <= new Date()) {
-    return res.status(400).json({ error: 'Le match a déjà commencé — paris fermés' });
-  }
+  const matchErr = assertMatchOpenForBets(match);
+  if (matchErr) return res.status(match ? 400 : 404).json({ error: matchErr });
 
   const oddsRow = await db.prepare('SELECT * FROM match_odds WHERE match_id = ? AND bookmaker = ?')
     .get(matchId, bookmaker);
   if (!oddsRow) return res.status(400).json({ error: 'Bookmaker introuvable' });
 
-  const oddsValue = outcome === 'home' ? oddsRow.home_odds
-    : outcome === 'away' ? oddsRow.away_odds
-    : oddsRow.draw_odds;
+  const oddsValue = resolveOddsValue(oddsRow, outcome);
 
   if (!oddsValue) return res.status(400).json({ error: 'Pas de cote pour ce résultat' });
 
@@ -394,6 +396,97 @@ app.post('/api/bets', authMiddleware, async (req, res) => {
     bet: { id: betId, outcome, stake, odds: oddsValue, bookmaker, potentialWin: Math.round(stake * oddsValue * 100) / 100 },
     points: pointsRow.points,
   });
+});
+
+app.patch('/api/bets/:id', authMiddleware, async (req, res) => {
+  const betId = parseInt(req.params.id, 10);
+  const { outcome, stake, bookmaker } = req.body;
+
+  const bet = await db.prepare('SELECT * FROM bets WHERE id = ? AND user_id = ?').get(betId, req.user.id);
+  if (!bet) return res.status(404).json({ error: 'Pari introuvable' });
+  if (bet.status !== 'pending') return res.status(400).json({ error: 'Ce pari ne peut plus être modifié' });
+
+  const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(bet.match_id);
+  const matchErr = assertMatchOpenForBets(match);
+  if (matchErr) return res.status(400).json({ error: matchErr });
+
+  const newOutcome = outcome || bet.outcome;
+  const newBookmaker = bookmaker || bet.bookmaker;
+  const newStake = stake != null ? Number(stake) : bet.stake;
+
+  if (!['home', 'draw', 'away'].includes(newOutcome)) {
+    return res.status(400).json({ error: 'Résultat invalide' });
+  }
+  if (!newStake || newStake <= 0 || newStake > 500) {
+    return res.status(400).json({ error: 'Mise entre 1 et 500 points' });
+  }
+
+  const member = await db.prepare('SELECT * FROM league_members WHERE league_id = ? AND user_id = ?')
+    .get(bet.league_id, req.user.id);
+  if (!member) return res.status(403).json({ error: 'Pas dans cette ligue' });
+
+  const stakeDiff = newStake - bet.stake;
+  if (stakeDiff > 0 && member.points < stakeDiff) {
+    return res.status(400).json({ error: 'Points insuffisants pour cette mise' });
+  }
+
+  const oddsRow = await db.prepare('SELECT * FROM match_odds WHERE match_id = ? AND bookmaker = ?')
+    .get(bet.match_id, newBookmaker);
+  if (!oddsRow) return res.status(400).json({ error: 'Bookmaker introuvable' });
+
+  const oddsValue = resolveOddsValue(oddsRow, newOutcome);
+  if (!oddsValue) return res.status(400).json({ error: 'Pas de cote pour ce résultat' });
+
+  await db.transaction(async (tx) => {
+    if (stakeDiff > 0) {
+      await tx.prepare('UPDATE league_members SET points = points - ? WHERE league_id = ? AND user_id = ?')
+        .run(stakeDiff, bet.league_id, req.user.id);
+    } else if (stakeDiff < 0) {
+      await tx.prepare('UPDATE league_members SET points = points + ? WHERE league_id = ? AND user_id = ?')
+        .run(-stakeDiff, bet.league_id, req.user.id);
+    }
+    await tx.prepare(`
+      UPDATE bets SET outcome = ?, stake = ?, odds = ?, bookmaker = ? WHERE id = ?
+    `).run(newOutcome, newStake, oddsValue, newBookmaker, betId);
+  });
+
+  const pointsRow = await db.prepare('SELECT points FROM league_members WHERE league_id = ? AND user_id = ?')
+    .get(bet.league_id, req.user.id);
+
+  res.json({
+    bet: {
+      id: betId,
+      outcome: newOutcome,
+      stake: newStake,
+      odds: oddsValue,
+      bookmaker: newBookmaker,
+      potentialWin: Math.round(newStake * oddsValue * 100) / 100,
+    },
+    points: pointsRow.points,
+  });
+});
+
+app.delete('/api/bets/:id', authMiddleware, async (req, res) => {
+  const betId = parseInt(req.params.id, 10);
+
+  const bet = await db.prepare('SELECT * FROM bets WHERE id = ? AND user_id = ?').get(betId, req.user.id);
+  if (!bet) return res.status(404).json({ error: 'Pari introuvable' });
+  if (bet.status !== 'pending') return res.status(400).json({ error: 'Ce pari ne peut plus être annulé' });
+
+  const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(bet.match_id);
+  const matchErr = assertMatchOpenForBets(match);
+  if (matchErr) return res.status(400).json({ error: matchErr });
+
+  await db.transaction(async (tx) => {
+    await tx.prepare('UPDATE league_members SET points = points + ? WHERE league_id = ? AND user_id = ?')
+      .run(bet.stake, bet.league_id, req.user.id);
+    await tx.prepare('DELETE FROM bets WHERE id = ?').run(betId);
+  });
+
+  const pointsRow = await db.prepare('SELECT points FROM league_members WHERE league_id = ? AND user_id = ?')
+    .get(bet.league_id, req.user.id);
+
+  res.json({ ok: true, points: pointsRow.points });
 });
 
 app.get('/api/bets', authMiddleware, async (req, res) => {
