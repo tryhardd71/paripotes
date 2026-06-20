@@ -41,12 +41,16 @@ app.get('/api/auth/check', (req, res) => {
   });
 });
 
+function getEmailStatus() {
+  const brevo = !!(process.env.BREVO_API_KEY && process.env.BREVO_SENDER_EMAIL);
+  const resend = !!process.env.RESEND_API_KEY;
+  const smtp = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  const primary = brevo ? 'brevo' : resend ? 'resend' : smtp ? 'smtp' : null;
+  return { brevo, resend, smtp, primary, ok: !!(brevo || resend || smtp) };
+}
+
 function isEmailConfigured() {
-  return !!(
-    process.env.BREVO_API_KEY ||
-    process.env.RESEND_API_KEY ||
-    (process.env.SMTP_USER && process.env.SMTP_PASS)
-  );
+  return getEmailStatus().ok;
 }
 
 app.post('/api/auth/send-code', async (req, res) => {
@@ -379,12 +383,14 @@ app.get('/api/status', (_req, res) => {
   const oddsCount = db.prepare('SELECT COUNT(*) as c FROM match_odds').get().c;
   const bookmakers = db.prepare('SELECT DISTINCT bookmaker FROM match_odds ORDER BY bookmaker').all().map((r) => r.bookmaker);
 
+  const email = getEmailStatus();
   res.json({
     matches: matchCount,
     odds: oddsCount,
     bookmakers,
     oddsApiConfigured: !!process.env.ODDS_API_KEY,
-    emailConfigured: isEmailConfigured(),
+    emailConfigured: email.ok,
+    email,
   });
 });
 
