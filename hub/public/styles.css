@@ -1,0 +1,170 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #080c14;
+  --surface: #111827;
+  --border: #243044;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --green: #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.25);
+  --purple: #7c5cff;
+  --purple-glow: rgba(124, 92, 255, 0.25);
+  --radius: 20px;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+html { font-size: 16px; }
+
+body {
+  font-family: 'Outfit', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 0%, var(--green-glow), transparent),
+    radial-gradient(ellipse 60% 45% at 80% 100%, var(--purple-glow), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px 48px;
+  gap: 40px;
+}
+
+.hero {
+  text-align: center;
+  max-width: 520px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  margin-bottom: 20px;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.15;
+  background: linear-gradient(135deg, var(--green), #4ade80 40%, var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero p {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 28px 26px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+.card--paris:hover {
+  border-color: var(--green);
+  box-shadow: 0 16px 48px var(--green-glow);
+}
+
+.card--imposteur:hover {
+  border-color: var(--purple);
+  box-shadow: 0 16px 48px var(--purple-glow);
+}
+
+.card-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.card h2 {
+  font-size: 1.45rem;
+  font-weight: 700;
+}
+
+.card--paris h2 { color: var(--green); }
+.card--imposteur h2 { color: var(--purple); }
+
+.card-desc {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  flex: 1;
+}
+
+.card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-top: 4px;
+}
+
+.card--paris .card-cta { color: var(--green); }
+.card--imposteur .card-cta { color: var(--purple); }
+
+.card-cta span {
+  transition: transform 0.2s ease;
+}
+
+.card:hover .card-cta span {
+  transform: translateX(4px);
+}
+
+.footer {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}

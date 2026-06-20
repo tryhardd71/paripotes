@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Les Potes — Choisis ton jeu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/config.js"></script>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="page">
+    <header class="hero">
+      <span class="badge">Bienvenue</span>
+      <h1>Les Potes</h1>
+      <p>Deux jeux entre amis — choisis où tu veux aller.</p>
+    </header>
+
+    <nav class="cards" aria-label="Choisir un jeu">
+      <a id="link-paripotes" class="card card--paris" href="#">
+        <span class="card-icon" aria-hidden="true">⚽</span>
+        <h2>PariPotes</h2>
+        <p class="card-desc">Paris foot entre potes — ligues privées, cotes et classement pour la CDM 2026.</p>
+        <span class="card-cta">Jouer aux paris <span aria-hidden="true">→</span></span>
+      </a>
+
+      <a id="link-imposteur" class="card card--imposteur" href="#">
+        <span class="card-icon" aria-hidden="true">🕵️</span>
+        <h2>Imposteur Mots</h2>
+        <p class="card-desc">Trouve l'imposteur — mots secrets, tours de parole et vote final entre potes.</p>
+        <span class="card-cta">Jouer à l'imposteur <span aria-hidden="true">→</span></span>
+      </a>
+    </nav>
+
+    <p class="footer">Chaque jeu reste indépendant — tu es redirigé vers le bon site.</p>
+  </div>
+
+  <script>
+    const cfg = window.HUB_CONFIG || {
+      paripotesUrl: 'https://paripotes.onrender.com',
+      imposteurUrl: 'https://imposteur-mots.onrender.com',
+    };
+
+    document.getElementById('link-paripotes').href = cfg.paripotesUrl;
+    document.getElementById('link-imposteur').href = cfg.imposteurUrl;
+  </script>
+</body>
+</html>

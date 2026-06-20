@@ -1,5 +1,21 @@
 services:
   - type: web
+    name: potes-hub
+    runtime: node
+    plan: free
+    rootDir: hub
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PARIPOTES_URL
+        value: https://paripotes.onrender.com
+      - key: IMPOSTEUR_URL
+        value: https://imposteur-mots.onrender.com
+
+  - type: web
     name: paripotes
     runtime: node
     plan: free
