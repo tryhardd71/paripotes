@@ -12,7 +12,7 @@
   <div id="app">
     <!-- Auth -->
     <div id="auth-screen" class="screen">
-      <div class="auth-card">
+      <div class="auth-card" id="auth-card">
         <div class="logo">
           <span class="logo-icon">⚽</span>
           <h1>PariPotes</h1>
@@ -35,7 +35,7 @@
             <input type="checkbox" id="remember-me" checked>
             <span>Se souvenir de moi</span>
           </label>
-          <button id="login-btn" class="btn btn-primary">Se connecter</button>
+          <button type="button" id="login-btn" class="btn btn-primary">Se connecter</button>
           <button type="button" id="forgot-btn" class="btn btn-ghost btn-sm">Mot de passe oublié ?</button>
         </div>
 
@@ -43,7 +43,7 @@
         <div id="panel-register-email" class="auth-step hidden">
           <label>Ton email</label>
           <input type="email" id="register-email" placeholder="pote@email.com" autocomplete="email">
-          <button id="send-code-btn" class="btn btn-primary">Recevoir mon code</button>
+          <button type="button" id="send-code-btn" class="btn btn-primary">Recevoir mon code</button>
           <label class="remember-row">
             <input type="checkbox" id="remember-me-register" checked>
             <span>Se souvenir de moi</span>
@@ -60,7 +60,7 @@
           <input type="text" id="username-input" placeholder="Ton pseudo" maxlength="20">
           <label>Mot de passe (6 caractères min.)</label>
           <input type="password" id="register-password" placeholder="Choisis un mot de passe" autocomplete="new-password">
-          <button id="register-btn" class="btn btn-primary">Créer mon compte</button>
+          <button type="button" id="register-btn" class="btn btn-primary">Créer mon compte</button>
           <button type="button" id="back-register-btn" class="btn btn-ghost">Retour</button>
         </div>
 
@@ -69,13 +69,13 @@
           <p class="hint">On t'envoie un code pour réinitialiser ton mot de passe.</p>
           <label>Email</label>
           <input type="email" id="forgot-email" placeholder="pote@email.com">
-          <button id="forgot-send-btn" class="btn btn-primary">Envoyer le code</button>
+          <button type="button" id="forgot-send-btn" class="btn btn-primary">Envoyer le code</button>
           <div id="forgot-reset-fields" class="hidden">
             <label>Code</label>
             <input type="text" id="forgot-code" placeholder="123456" maxlength="6">
             <label>Nouveau mot de passe</label>
             <input type="password" id="forgot-password" placeholder="Nouveau mot de passe">
-            <button id="forgot-reset-btn" class="btn btn-primary">Réinitialiser</button>
+            <button type="button" id="forgot-reset-btn" class="btn btn-primary">Réinitialiser</button>
           </div>
           <button type="button" id="back-login-btn" class="btn btn-ghost">Retour connexion</button>
         </div>
@@ -93,7 +93,7 @@
         </div>
         <div class="header-right">
           <span id="user-badge" class="user-badge"></span>
-          <button id="logout-btn" class="btn btn-ghost btn-sm">Déco</button>
+          <button type="button" id="logout-btn" class="btn btn-ghost btn-sm">Déco</button>
         </div>
       </header>
 
@@ -172,7 +172,6 @@
     <div id="toast" class="toast hidden"></div>
   </div>
 
-  <script src="/js/app.js"></script>
-  <script src="/js/auth.js"></script>
+  <script src="/js/app.js" defer></script>
 </body>
 </html>

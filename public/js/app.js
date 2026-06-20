@@ -39,9 +39,7 @@ function clearSession() {
   localStorage.removeItem('pp_token');
 }
 
-window.saveSession = saveSession;
-window.clearSession = clearSession;
-window.fetchWithTimeout = fetchWithTimeout;
+
 let activeLeague = null;
 let matches = [];
 let matchFilter = 'upcoming';
@@ -64,8 +62,6 @@ function toast(msg) {
   el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
-window.toast = toast;
-
 function formatDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -77,7 +73,7 @@ function outcomeLabel(outcome, match) {
   return 'Match nul';
 }
 
-// ─── Main app (auth dans auth.js) ─────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 const authScreen = document.getElementById('auth-screen');
 const mainScreen = document.getElementById('main-screen');
@@ -91,20 +87,247 @@ function showMain() {
   });
 }
 
-window.showMain = showMain;
+function showAuthPanel(id) {
+  ['panel-login', 'panel-register-email', 'panel-register-code', 'panel-forgot'].forEach((p) => {
+    document.getElementById(p).classList.toggle('hidden', p !== id);
+  });
+}
 
-(async () => {
-  fetch('/api/status').catch(() => {});
-  if (token) {
-    try {
-      const data = await api('/api/me');
-      user = data.user;
-      showMain();
-    } catch {
-      clearSession();
-    }
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function hideAuthError() {
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+function goToLogin(email, message) {
+  switchAuthTab('login');
+  if (email) document.getElementById('login-email').value = email;
+  if (message) showAuthError(message);
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('show-login').classList.toggle('active', isLogin);
+  document.getElementById('show-register').classList.toggle('active', !isLogin);
+  showAuthPanel(isLogin ? 'panel-login' : 'panel-register-email');
+  hideAuthError();
+  if (isLogin) {
+    const saved = localStorage.getItem('pp_email');
+    if (saved) document.getElementById('login-email').value = saved;
   }
-})();
+}
+
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const rememberMe = document.getElementById('remember-me').checked;
+  if (!email) return showAuthError('Entre ton email');
+  if (!password) return showAuthError('Entre ton mot de passe');
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.textContent = 'Connexion...';
+  hideAuthError();
+  try {
+    const data = await fetchWithTimeout('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, rememberMe }),
+    });
+    saveSession(data);
+    showMain();
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Se connecter';
+  }
+}
+
+async function handleSendCode() {
+  const email = document.getElementById('register-email').value.trim();
+  if (!email) return showAuthError('Entre ton email');
+  const btn = document.getElementById('send-code-btn');
+  btn.disabled = true;
+  btn.textContent = 'Envoi en cours...';
+  hideAuthError();
+  try {
+    const check = await fetchWithTimeout(`/api/auth/check?email=${encodeURIComponent(email)}`);
+    if (check.exists && check.hasPassword) {
+      goToLogin(email, 'Compte déjà créé — connecte-toi avec ton mot de passe (pas besoin de code).');
+      return;
+    }
+    await fetchWithTimeout('/api/auth/send-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    document.getElementById('email-display').textContent = email;
+    showAuthPanel('panel-register-code');
+    document.getElementById('code-input').focus();
+    toast('Code envoyé ! Vérifie ta boîte mail.');
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Recevoir mon code';
+  }
+}
+
+async function handleRegister() {
+  const email = document.getElementById('register-email').value.trim();
+  const code = document.getElementById('code-input').value.trim();
+  const username = document.getElementById('username-input').value.trim();
+  const password = document.getElementById('register-password').value;
+  const rememberMe = document.getElementById('remember-me-register').checked;
+  if (!code) return showAuthError('Entre le code reçu par email');
+  if (!password) return showAuthError('Choisis un mot de passe');
+  if (password.length < 6) return showAuthError('Mot de passe : 6 caractères minimum');
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true;
+  btn.textContent = 'Création...';
+  hideAuthError();
+  try {
+    const data = await fetchWithTimeout('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, username, password, rememberMe }),
+    });
+    saveSession(data);
+    showMain();
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer mon compte';
+  }
+}
+
+async function handleForgotSend() {
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) return showAuthError('Entre ton email');
+  const btn = document.getElementById('forgot-send-btn');
+  btn.disabled = true;
+  btn.textContent = 'Envoi...';
+  hideAuthError();
+  try {
+    await fetchWithTimeout('/api/auth/send-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, reset: true }),
+    });
+    document.getElementById('forgot-reset-fields').classList.remove('hidden');
+    toast('Code envoyé !');
+  } catch (e) {
+    showAuthError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Envoyer le code';
+  }
+}
+
+async function handleForgotReset() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const code = document.getElementById('forgot-code').value.trim();
+  const password = document.getElementById('forgot-password').value;
+  if (!code) return showAuthError('Entre le code reçu par email');
+  if (!password) return showAuthError('Choisis un nouveau mot de passe');
+  if (password.length < 6) return showAuthError('Mot de passe : 6 caractères minimum');
+  hideAuthError();
+  try {
+    const data = await fetchWithTimeout('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, password, rememberMe: true }),
+    });
+    saveSession(data);
+    showMain();
+    toast('Mot de passe mis à jour !');
+  } catch (e) {
+    showAuthError(e.message);
+  }
+}
+
+function initAuth() {
+  const card = document.getElementById('auth-card');
+  if (!card) return;
+
+  card.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    e.preventDefault();
+
+    switch (btn.id) {
+      case 'show-login':
+        switchAuthTab('login');
+        break;
+      case 'show-register':
+        switchAuthTab('register');
+        break;
+      case 'login-btn':
+        handleLogin();
+        break;
+      case 'send-code-btn':
+        handleSendCode();
+        break;
+      case 'register-btn':
+        handleRegister();
+        break;
+      case 'back-register-btn':
+        showAuthPanel('panel-register-email');
+        hideAuthError();
+        break;
+      case 'forgot-btn': {
+        const email = document.getElementById('login-email').value.trim();
+        document.getElementById('forgot-email').value = email;
+        document.getElementById('forgot-reset-fields').classList.add('hidden');
+        showAuthPanel('panel-forgot');
+        hideAuthError();
+        break;
+      }
+      case 'back-login-btn':
+        switchAuthTab('login');
+        break;
+      case 'forgot-send-btn':
+        handleForgotSend();
+        break;
+      case 'forgot-reset-btn':
+        handleForgotReset();
+        break;
+      default:
+        break;
+    }
+  });
+
+  if (localStorage.getItem('pp_email') && localStorage.getItem('pp_remember')) {
+    document.getElementById('login-email').value = localStorage.getItem('pp_email');
+    document.getElementById('remember-me').checked = true;
+  }
+}
+
+async function resumeSession() {
+  fetch('/api/status').catch(() => {});
+  if (!token) return;
+  try {
+    const data = await api('/api/me');
+    user = data.user;
+    showMain();
+  } catch {
+    clearSession();
+  }
+}
+
+function initApp() {
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+    clearSession();
+    authScreen.classList.remove('hidden');
+    mainScreen.classList.add('hidden');
+    switchAuthTab('login');
+  });
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -488,6 +711,20 @@ function hideModal() {
 document.getElementById('modal-overlay').onclick = (e) => {
   if (e.target.id === 'modal-overlay') hideModal();
 };
+
+}
+
+function boot() {
+  initAuth();
+  initApp();
+  resumeSession();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 

@@ -132,7 +132,17 @@ body {
 .btn-ghost:hover { color: var(--text); }
 .btn-sm { padding: 8px 16px; width: auto; margin-top: 0; font-size: .85rem; }
 
-.error { color: var(--danger); font-size: .9rem; margin-top: 12px; text-align: center; }
+.error {
+  color: #fecaca;
+  background: rgba(239, 68, 68, .15);
+  border: 1px solid rgba(239, 68, 68, .4);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: .9rem;
+  margin-top: 12px;
+  text-align: center;
+}
+.auth-card { position: relative; z-index: 2; }
 .dev-hint { color: var(--gold); font-size: .8rem; margin-top: 8px; text-align: center; }
 
 .email-setup-banner {
