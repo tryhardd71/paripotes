@@ -45,13 +45,16 @@ async function sendViaBrevo(to, subject, text, html) {
 
 async function sendViaResend(to, subject, text, html) {
   const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM || 'PariPotes <onboarding@resend.dev>';
   if (!apiKey) return null;
+  // onboarding@resend.dev = test uniquement, pas pour les potes
+  if (from.includes('onboarding@resend.dev')) return null;
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: process.env.RESEND_FROM || 'PariPotes <onboarding@resend.dev>',
+      from,
       to: [to],
       subject,
       text,
@@ -123,8 +126,8 @@ export async function sendOtpEmail(to, code) {
   const text = `Salut !\n\nTon code de connexion PariPotes : ${code}\n\nIl expire dans 10 minutes.\n\nBons paris entre potes ! ⚽`;
   const html = buildOtpHtml(code);
 
-  // API HTTP d'abord (fiable sur Render), SMTP en dernier recours (souvent bloqué)
-  const methods = [sendViaResend, sendViaBrevo, sendViaSmtp];
+  // Brevo en premier : gratuit, marche vers n'importe quel email (expéditeur vérifié)
+  const methods = [sendViaBrevo, sendViaResend, sendViaSmtp];
   let lastError = null;
 
   for (const method of methods) {
