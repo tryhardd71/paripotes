@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { customAlphabet } from 'nanoid';
 import db, { initDb, getDbType } from './db.js';
 import {
   authMiddleware,
@@ -23,7 +22,26 @@ import { syncAll } from './sync.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3847;
-const leagueCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
+
+function slugLeagueCode(name) {
+  const slug = name.trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  return slug.slice(0, 8) || 'KEO';
+}
+
+async function generateLeagueCode(name) {
+  const base = slugLeagueCode(name);
+  let suffix = 0;
+  let candidate = base;
+  while (await db.prepare('SELECT 1 FROM leagues WHERE code = ?').get(candidate)) {
+    suffix += 1;
+    candidate = `${base}${suffix}`;
+  }
+  return candidate;
+}
 
 for (const method of ['get', 'post', 'put', 'delete', 'patch']) {
   const register = app[method].bind(app);
@@ -164,7 +182,7 @@ app.post('/api/leagues', authMiddleware, async (req, res) => {
   const { name, startingPoints = 1000 } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Nom de ligue requis' });
 
-  const code = leagueCode();
+  const code = await generateLeagueCode(name.trim());
   const result = await db.prepare(`
     INSERT INTO leagues (name, code, creator_id, starting_points) VALUES (?, ?, ?, ?)
   `).run(name.trim(), code, req.user.id, startingPoints);
@@ -199,6 +217,18 @@ app.post('/api/leagues/join', authMiddleware, async (req, res) => {
     .run(league.id, req.user.id, league.starting_points);
 
   res.json({ league: await formatLeague(league, req.user.id) });
+});
+
+app.post('/api/leagues/:id/leave', authMiddleware, async (req, res) => {
+  const leagueId = parseInt(req.params.id, 10);
+  const member = await db.prepare('SELECT * FROM league_members WHERE league_id = ? AND user_id = ?')
+    .get(leagueId, req.user.id);
+  if (!member) return res.status(404).json({ error: 'Tu n\'es pas dans cette ligue' });
+
+  await db.prepare('DELETE FROM league_members WHERE league_id = ? AND user_id = ?')
+    .run(leagueId, req.user.id);
+
+  res.json({ ok: true });
 });
 
 app.get('/api/leagues', authMiddleware, async (req, res) => {

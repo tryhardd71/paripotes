@@ -398,7 +398,7 @@ document.querySelectorAll('.pill').forEach((pill) => {
 document.getElementById('create-league-btn').onclick = () => {
   showModal(`
     <h3>Créer une ligue</h3>
-    <input id="modal-league-name" placeholder="Ex: Les potes du lycée" maxlength="40">
+    <input id="modal-league-name" placeholder="Ex: KEO" maxlength="40">
     <input id="modal-starting-points" type="number" placeholder="Points de départ (1000)" value="1000" min="100" max="10000">
     <div class="modal-actions">
       <button class="btn btn-ghost" id="modal-cancel">Annuler</button>
@@ -450,9 +450,12 @@ function renderLeagues() {
   }
   list.innerHTML = leagues.map((l) => `
     <div class="league-card ${activeLeague?.id === l.id ? 'selected' : ''}" data-id="${l.id}">
-      <h3>${esc(l.name)}</h3>
+      <div class="league-card-top">
+        <h3>${esc(l.name)}</h3>
+        <button type="button" class="league-leave-btn" data-leave="${l.id}" title="Quitter la ligue">Quitter</button>
+      </div>
       <div class="league-meta">
-        <span class="league-code">${l.code}</span>
+        <span class="league-code">${esc(l.code)}</span>
         <span>${l.memberCount} joueur${l.memberCount > 1 ? 's' : ''}</span>
         <span>${l.points} pts</span>
       </div>
@@ -462,6 +465,30 @@ function renderLeagues() {
   list.querySelectorAll('.league-card').forEach((card) => {
     card.onclick = () => selectLeague(parseInt(card.dataset.id, 10));
   });
+  list.querySelectorAll('.league-leave-btn').forEach((btn) => {
+    btn.onclick = (e) => leaveLeague(parseInt(btn.dataset.leave, 10), e);
+  });
+}
+
+async function leaveLeague(id, e) {
+  e.stopPropagation();
+  const league = leagues.find((l) => l.id === id);
+  if (!league) return;
+  if (!confirm(`Quitter la ligue « ${league.name} » ?`)) return;
+  try {
+    await api(`/api/leagues/${id}/leave`, { method: 'POST' });
+    toast('Tu as quitté la ligue');
+    if (activeLeague?.id === id) {
+      activeLeague = null;
+      matches = [];
+      updateLeagueBar();
+      renderMatches();
+    }
+    await loadLeagues();
+    if (leagues.length) selectLeague(leagues[0].id);
+  } catch (err) {
+    toast(err.message);
+  }
 }
 
 async function selectLeague(id) {

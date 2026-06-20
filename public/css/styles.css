@@ -294,7 +294,31 @@ body {
   box-shadow: 0 0 0 1px rgba(34,197,94,.2);
 }
 .league-card.selected { background: rgba(34,197,94,.06); }
-.league-card h3 { font-size: 1rem; font-weight: 700; }
+.league-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.league-card h3 { font-size: 1rem; font-weight: 700; flex: 1; }
+.league-leave-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: .72rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.league-leave-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(239, 68, 68, .08);
+}
 .league-meta {
   display: flex;
   gap: 12px;

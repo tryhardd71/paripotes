@@ -238,6 +238,19 @@ function execute(sql, params, mode) {
     return found ? [{ 1: 1 }] : [];
   }
 
+  if (s.includes('SELECT 1 FROM leagues WHERE code')) {
+    const found = data.leagues.some((r) => r.code === params[0]);
+    return found ? [{ 1: 1 }] : [];
+  }
+
+  if (s.startsWith('DELETE FROM league_members WHERE league_id')) {
+    data.league_members = data.league_members.filter(
+      (r) => !(r.league_id === params[0] && r.user_id === params[1]),
+    );
+    save(data);
+    return {};
+  }
+
   if (s.includes('SELECT * FROM league_members WHERE league_id') && s.includes('AND user_id')) {
     return data.league_members.filter((r) => r.league_id === params[0] && r.user_id === params[1]);
   }
