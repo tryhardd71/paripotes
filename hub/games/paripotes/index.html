@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PariPotes — Coupe du Monde 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="/config.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Auth -->
+    <div id="auth-screen" class="screen">
+      <div class="auth-card" id="auth-card">
+        <div class="logo">
+          <span class="logo-icon">⚽</span>
+          <h1>PariPotes</h1>
+          <p class="tagline">Paris entre potes — CDM 2026</p>
+        </div>
+
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" id="show-login">Connexion</button>
+          <button type="button" class="auth-tab" id="show-register">Inscription</button>
+        </div>
+
+        <!-- Connexion -->
+        <div id="panel-login" class="auth-step">
+          <p class="hint" style="margin-bottom:12px">Déjà inscrit ? Email + mot de passe, sans code.</p>
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="pote@email.com" autocomplete="email">
+          <label>Mot de passe</label>
+          <div class="password-field">
+            <input type="password" id="login-password" placeholder="Ton mot de passe" autocomplete="current-password">
+            <button type="button" class="password-toggle" data-target="login-password" aria-label="Afficher le mot de passe">👁</button>
+          </div>
+          <label class="remember-row">
+            <input type="checkbox" id="remember-me" checked>
+            <span>Se souvenir de moi</span>
+          </label>
+          <button type="button" id="login-btn" class="btn btn-primary">Se connecter</button>
+          <button type="button" id="forgot-btn" class="btn btn-ghost btn-sm">Mot de passe oublié ?</button>
+        </div>
+
+        <!-- Inscription étape 1 -->
+        <div id="panel-register-email" class="auth-step hidden">
+          <label>Ton email</label>
+          <input type="email" id="register-email" placeholder="pote@email.com" autocomplete="email">
+          <button type="button" id="send-code-btn" class="btn btn-primary">Recevoir mon code</button>
+          <label class="remember-row">
+            <input type="checkbox" id="remember-me-register" checked>
+            <span>Se souvenir de moi</span>
+          </label>
+        </div>
+
+        <!-- Inscription étape 2 -->
+        <div id="panel-register-code" class="auth-step hidden">
+          <p class="hint">Code envoyé à <strong id="email-display"></strong></p>
+          <p class="hint" style="font-size:.8rem;margin-top:-8px;color:var(--muted)">Vérifie tes spams. Pas reçu ? Attends 1 min puis renvoie.</p>
+          <button type="button" id="resend-code-btn" class="btn btn-ghost btn-sm">Renvoyer le code</button>
+          <label>Code à 6 chiffres</label>
+          <input type="text" id="code-input" placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          <label>Pseudo</label>
+          <input type="text" id="username-input" placeholder="Ton pseudo" maxlength="20">
+          <label>Mot de passe (6 caractères min.)</label>
+          <div class="password-field">
+            <input type="password" id="register-password" placeholder="Choisis un mot de passe" autocomplete="new-password">
+            <button type="button" class="password-toggle" data-target="register-password" aria-label="Afficher le mot de passe">👁</button>
+          </div>
+          <button type="button" id="register-btn" class="btn btn-primary">Créer mon compte</button>
+          <button type="button" id="back-register-btn" class="btn btn-ghost">Retour</button>
+        </div>
+
+        <!-- Mot de passe oublié -->
+        <div id="panel-forgot" class="auth-step hidden">
+          <p class="hint">On t'envoie un code pour réinitialiser ton mot de passe.</p>
+          <label>Email</label>
+          <input type="email" id="forgot-email" placeholder="pote@email.com">
+          <button type="button" id="forgot-send-btn" class="btn btn-primary">Envoyer le code</button>
+          <div id="forgot-reset-fields" class="hidden">
+            <label>Code</label>
+            <input type="text" id="forgot-code" placeholder="123456" maxlength="6">
+            <label>Nouveau mot de passe</label>
+            <div class="password-field">
+              <input type="password" id="forgot-password" placeholder="Nouveau mot de passe">
+              <button type="button" class="password-toggle" data-target="forgot-password" aria-label="Afficher le mot de passe">👁</button>
+            </div>
+            <button type="button" id="forgot-reset-btn" class="btn btn-primary">Réinitialiser</button>
+          </div>
+          <button type="button" id="back-login-btn" class="btn btn-ghost">Retour connexion</button>
+        </div>
+
+        <p id="auth-error" class="error hidden"></p>
+        <p id="auth-hint" class="dev-hint hidden"></p>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-screen" class="screen hidden">
+      <header class="header">
+        <div class="header-left">
+          <span class="logo-small">⚽ PariPotes</span>
+        </div>
+        <div class="header-right">
+          <button type="button" id="refresh-btn" class="btn btn-ghost btn-sm" title="Actualiser">↻</button>
+          <span id="user-badge" class="user-badge"></span>
+          <button type="button" id="logout-btn" class="btn btn-ghost btn-sm">Déco</button>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <button class="tab active" data-tab="leagues">Ligues</button>
+        <button class="tab" data-tab="matches">Matchs</button>
+        <button class="tab" data-tab="bets">Mes paris</button>
+        <button class="tab" data-tab="leaderboard">Classement</button>
+      </nav>
+
+      <div id="app-loading" class="app-loading hidden">Chargement en cours…</div>
+
+      <main class="content">
+        <!-- Ligues -->
+        <section id="tab-leagues" class="tab-panel active">
+          <div class="panel-header">
+            <h2>Mes ligues</h2>
+            <button id="create-league-btn" class="btn btn-primary btn-sm">+ Créer</button>
+          </div>
+          <div id="leagues-list" class="cards-list"></div>
+
+          <div class="join-box">
+            <h3>Rejoindre une ligue</h3>
+            <div class="join-row">
+              <input type="text" id="join-code-input" placeholder="KEO, KEO1, KEO2…" maxlength="12" style="text-transform:uppercase">
+              <button id="join-league-btn" class="btn btn-secondary">Rejoindre</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Matchs -->
+        <section id="tab-matches" class="tab-panel">
+          <div class="panel-header">
+            <h2>Matchs CDM 2026</h2>
+            <div class="filter-pills">
+              <button class="pill active" data-filter="upcoming">À venir</button>
+              <button class="pill" data-filter="all">Tous</button>
+              <button class="pill" data-filter="finished">Terminés</button>
+            </div>
+          </div>
+          <p id="no-league-hint" class="hint-banner hidden">Sélectionne une ligue dans l'onglet Ligues pour parier.</p>
+          <div id="matches-list" class="matches-list"></div>
+        </section>
+
+        <!-- Mes paris -->
+        <section id="tab-bets" class="tab-panel">
+          <div class="panel-header"><h2>Mes paris</h2></div>
+          <div id="bets-list" class="cards-list"></div>
+        </section>
+
+        <!-- Classement -->
+        <section id="tab-leaderboard" class="tab-panel">
+          <div class="panel-header"><h2>Classement</h2></div>
+          <div id="leaderboard" class="leaderboard"></div>
+        </section>
+      </main>
+
+      <div id="active-league-bar" class="league-bar hidden">
+        <span>Ligue active : <strong id="active-league-name"></strong></span>
+        <span class="points-pill" id="active-league-points"></span>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+      <div class="modal" id="modal-content"></div>
+    </div>
+
+    <!-- Bet slip -->
+    <div id="bet-slip" class="bet-slip hidden">
+      <div class="bet-slip-header">
+        <h3>Placer un pari</h3>
+        <button id="close-bet-slip" class="btn-close">×</button>
+      </div>
+      <div id="bet-slip-body"></div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="js/app.js" defer></script>
+</body>
+</html>
