@@ -25,6 +25,17 @@ const app = express();
 const PORT = process.env.PORT || 3847;
 const leagueCode = customAlphabet('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
 
+for (const method of ['get', 'post', 'put', 'delete', 'patch']) {
+  const register = app[method].bind(app);
+  app[method] = (path, ...handlers) => {
+    const wrapped = handlers.map((h) => {
+      if (typeof h !== 'function' || h.length >= 4) return h;
+      return (req, res, next) => Promise.resolve(h(req, res, next)).catch(next);
+    });
+    return register(path, ...wrapped);
+  };
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -398,6 +409,11 @@ app.get('/api/status', async (_req, res) => {
     emailConfigured: email.ok,
     email,
   });
+});
+
+app.use((err, _req, res, _next) => {
+  console.error('API error:', err.message || err);
+  res.status(500).json({ error: err.message || 'Erreur serveur' });
 });
 
 // ─── Start ──────────────────────────────────────────────────────────────────

@@ -28,10 +28,10 @@ function toPositional(sql, params) {
 
 function withReturningId(sql) {
   const s = sql.trim();
-  if (/^INSERT INTO/i.test(s) && !/RETURNING/i.test(s)) {
-    return `${s} RETURNING id`;
-  }
-  return s;
+  if (!/^INSERT INTO/i.test(s) || /RETURNING/i.test(s)) return s;
+  // otp_codes et sessions n'ont pas de colonne id
+  if (/INSERT INTO (otp_codes|sessions|league_members)\b/i.test(s)) return s;
+  return `${s} RETURNING id`;
 }
 
 function createStmt(runQuery) {
@@ -60,6 +60,7 @@ export async function createPgBackend() {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
   });
+  pool.on('error', (err) => console.error('PG pool error:', err.message));
 
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   await pool.query(schema);

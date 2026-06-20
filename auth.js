@@ -85,13 +85,17 @@ export async function getUserByEmail(email) {
 }
 
 export async function authMiddleware(req, res, next) {
-  const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
-  const user = await getUserFromToken(token);
-  if (!user) return res.status(401).json({ error: 'Non connecté' });
-  req.user = user;
-  req.token = token;
-  next();
+  try {
+    const header = req.headers.authorization;
+    const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+    const user = await getUserFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Non connecté' });
+    req.user = user;
+    req.token = token;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 export function sanitizeUser(user) {
